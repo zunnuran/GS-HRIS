@@ -113,8 +113,8 @@ export const payrollRecords = pgTable("payroll_records", {
   week5Expected: text("week5_expected").default("00:00"),
   week5Actual: text("week5_actual").default("00:00"),
   
-  // Paid leave hours (added to logged time)
-  paidLeaveHours: text("paid_leave_hours").default("00:00"),
+  // Paid leaves count (e.g., 1, 1.5, 2) - converted to hours based on employee's required hours per day
+  paidLeaves: decimal("paid_leaves", { precision: 4, scale: 2 }).default("0"),
   
   // Overtime settings
   enableOvertime: boolean("enable_overtime").default(false),

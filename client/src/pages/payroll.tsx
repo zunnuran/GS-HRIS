@@ -158,7 +158,7 @@ const payrollFormSchema = z.object({
   week4Actual: z.string().default("00:00"),
   week5Expected: z.string().default("00:00"),
   week5Actual: z.string().default("00:00"),
-  paidLeaveHours: z.string().default("00:00"),
+  paidLeaves: z.string().default("0"),
   enableOvertime: z.boolean().default(false),
   leaveEncashmentDays: z.string().default("0"),
   advanceDeduction: z.string().default("0"),
@@ -172,6 +172,7 @@ type PayrollFormValues = z.infer<typeof payrollFormSchema>;
 
 interface PayrollCalculation {
   totalHoursWorked: number;
+  paidLeaves: number;
   paidLeaveHours: number;
   effectiveHoursWorked: number;
   requiredMonthlyHours: number;
@@ -194,6 +195,7 @@ function calculatePayroll(
   if (!employee) {
     return {
       totalHoursWorked: 0,
+      paidLeaves: 0,
       paidLeaveHours: 0,
       effectiveHoursWorked: 0,
       requiredMonthlyHours: 0,
@@ -223,8 +225,9 @@ function calculatePayroll(
     timeToDecimal(formValues.week4Actual || "00:00") +
     timeToDecimal(formValues.week5Actual || "00:00");
 
-  // Paid leave hours (added to logged time)
-  const paidLeaveHours = timeToDecimal(formValues.paidLeaveHours || "00:00");
+  // Paid leaves (count) - converted to hours based on required hours per day
+  const paidLeaves = parseFloat(formValues.paidLeaves || "0");
+  const paidLeaveHours = paidLeaves * requiredHoursPerDay;
   const effectiveHoursWorked = totalHoursWorked + paidLeaveHours;
 
   // Calculate required hours from sum of expected hours (reactive to changes)
@@ -270,6 +273,7 @@ function calculatePayroll(
 
   return {
     totalHoursWorked,
+    paidLeaves,
     paidLeaveHours,
     effectiveHoursWorked,
     requiredMonthlyHours,
@@ -352,64 +356,64 @@ function TimeInput({
 
   return (
     <div className="flex items-center gap-1">
-      <div className="flex flex-col">
+      <div className="flex flex-col items-center">
         <Button
           type="button"
           variant="ghost"
           size="icon"
-          className="h-5 w-10"
+          className="h-6 w-14"
           onClick={incrementHours}
           data-testid="button-increment-hours"
         >
-          <ChevronUp className="h-3 w-3" />
+          <ChevronUp className="h-4 w-4" />
         </Button>
         <Input
           {...props}
           type="text"
           value={hours.toString().padStart(2, "0")}
           onChange={handleHoursChange}
-          className="w-10 text-center font-mono text-sm h-8"
+          className="w-14 text-center font-mono text-base h-9"
           data-testid="input-hours"
         />
         <Button
           type="button"
           variant="ghost"
           size="icon"
-          className="h-5 w-10"
+          className="h-6 w-14"
           onClick={decrementHours}
           data-testid="button-decrement-hours"
         >
-          <ChevronDown className="h-3 w-3" />
+          <ChevronDown className="h-4 w-4" />
         </Button>
       </div>
-      <span className="text-muted-foreground font-bold text-lg">:</span>
-      <div className="flex flex-col">
+      <span className="text-muted-foreground font-bold text-xl">:</span>
+      <div className="flex flex-col items-center">
         <Button
           type="button"
           variant="ghost"
           size="icon"
-          className="h-5 w-10"
+          className="h-6 w-14"
           onClick={incrementMinutes}
           data-testid="button-increment-minutes"
         >
-          <ChevronUp className="h-3 w-3" />
+          <ChevronUp className="h-4 w-4" />
         </Button>
         <Input
           type="text"
           value={minutes.toString().padStart(2, "0")}
           onChange={handleMinutesChange}
-          className="w-10 text-center font-mono text-sm h-8"
+          className="w-14 text-center font-mono text-base h-9"
           data-testid="input-minutes"
         />
         <Button
           type="button"
           variant="ghost"
           size="icon"
-          className="h-5 w-10"
+          className="h-6 w-14"
           onClick={decrementMinutes}
           data-testid="button-decrement-minutes"
         >
-          <ChevronDown className="h-3 w-3" />
+          <ChevronDown className="h-4 w-4" />
         </Button>
       </div>
     </div>
@@ -669,10 +673,7 @@ function PayrollFormDialog({
                         name="workingDaysInMonth"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="flex items-center gap-1">
-                              <Calendar className="h-3 w-3" />
-                              Working Days
-                            </FormLabel>
+                            <FormLabel>Working Days</FormLabel>
                             <FormControl>
                               <Input 
                                 type="number" 
@@ -747,26 +748,55 @@ function PayrollFormDialog({
 
                 <Card>
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-sm font-medium">Paid Leave & Overtime</CardTitle>
-                    <CardDescription>Add paid leave hours and configure overtime pay</CardDescription>
+                    <CardTitle className="text-sm font-medium">Paid Leaves & Overtime</CardTitle>
+                    <CardDescription>Add paid leaves (days) and configure overtime pay</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="grid grid-cols-2 gap-6">
                       <FormField
                         control={form.control}
-                        name="paidLeaveHours"
+                        name="paidLeaves"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Paid Leave Hours (HH:MM)</FormLabel>
-                            <FormControl>
-                              <TimeInput
-                                value={field.value as string}
-                                onChange={field.onChange}
-                                data-testid="input-paid-leave-hours"
-                              />
-                            </FormControl>
+                            <FormLabel>Paid Leaves (Days)</FormLabel>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                onClick={() => {
+                                  const current = parseFloat(field.value) || 0;
+                                  if (current >= 0.25) field.onChange((current - 0.25).toFixed(2));
+                                }}
+                                data-testid="button-decrement-paid-leaves"
+                              >
+                                <Minus className="h-4 w-4" />
+                              </Button>
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  step="0.25"
+                                  min="0"
+                                  {...field}
+                                  className="w-24 text-center font-mono"
+                                  data-testid="input-paid-leaves"
+                                />
+                              </FormControl>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                onClick={() => {
+                                  const current = parseFloat(field.value) || 0;
+                                  field.onChange((current + 0.25).toFixed(2));
+                                }}
+                                data-testid="button-increment-paid-leaves"
+                              >
+                                <Plus className="h-4 w-4" />
+                              </Button>
+                            </div>
                             <p className="text-xs text-muted-foreground">
-                              These hours are added to logged time
+                              Converted to {calculation.paidLeaveHours.toFixed(1)} hours ({selectedEmployee?.requiredHoursPerDay || 8}h/day)
                             </p>
                             <FormMessage />
                           </FormItem>
@@ -995,9 +1025,9 @@ function PayrollFormDialog({
                                   <span className="text-muted-foreground">Hours Logged</span>
                                   <span className="font-mono">{calculation.totalHoursWorked.toFixed(1)}h</span>
                                 </div>
-                                {calculation.paidLeaveHours > 0 && (
+                                {calculation.paidLeaves > 0 && (
                                   <div className="flex justify-between text-green-600">
-                                    <span>+ Paid Leave Hours</span>
+                                    <span>+ Paid Leaves ({calculation.paidLeaves} days)</span>
                                     <span className="font-mono">{calculation.paidLeaveHours.toFixed(1)}h</span>
                                   </div>
                                 )}
