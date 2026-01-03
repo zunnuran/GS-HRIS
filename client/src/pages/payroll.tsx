@@ -43,6 +43,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { 
   Plus, 
+  Minus,
   Calculator,
   Eye,
   FileText,
@@ -53,8 +54,11 @@ import {
   CheckCircle2,
   AlertCircle,
   Trash2,
-  Calendar
+  Calendar,
+  ChevronUp,
+  ChevronDown
 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Accordion,
   AccordionContent,
@@ -154,6 +158,8 @@ const payrollFormSchema = z.object({
   week4Actual: z.string().default("00:00"),
   week5Expected: z.string().default("00:00"),
   week5Actual: z.string().default("00:00"),
+  paidLeaveHours: z.string().default("00:00"),
+  enableOvertime: z.boolean().default(false),
   leaveEncashmentDays: z.string().default("0"),
   advanceDeduction: z.string().default("0"),
   allowanceItems: z.array(allowanceItemSchema).default([]),
@@ -166,12 +172,16 @@ type PayrollFormValues = z.infer<typeof payrollFormSchema>;
 
 interface PayrollCalculation {
   totalHoursWorked: number;
+  paidLeaveHours: number;
+  effectiveHoursWorked: number;
   requiredMonthlyHours: number;
   hoursDifference: number;
   adjustedHoursDifference: number;
   perHourRate: number;
   perDayRate: number;
   hoursDeduction: number;
+  overtimeHours: number;
+  overtimePay: number;
   grossSalary: number;
   netSalary: number;
   totalAllowances: number;
@@ -184,12 +194,16 @@ function calculatePayroll(
   if (!employee) {
     return {
       totalHoursWorked: 0,
+      paidLeaveHours: 0,
+      effectiveHoursWorked: 0,
       requiredMonthlyHours: 0,
       hoursDifference: 0,
       adjustedHoursDifference: 0,
       perHourRate: 0,
       perDayRate: 0,
       hoursDeduction: 0,
+      overtimeHours: 0,
+      overtimePay: 0,
       grossSalary: 0,
       netSalary: 0,
       totalAllowances: 0,
@@ -201,7 +215,7 @@ function calculatePayroll(
   const workingDaysInMonth = parseInt(formValues.workingDaysInMonth) || 26;
   const overtimeMultiplier = parseFloat(employee.overtimeMultiplier) || 1.0;
 
-  // Convert HH:MM to decimal and sum
+  // Convert HH:MM to decimal and sum actual hours
   const totalHoursWorked =
     timeToDecimal(formValues.week1Actual || "00:00") +
     timeToDecimal(formValues.week2Actual || "00:00") +
@@ -209,8 +223,19 @@ function calculatePayroll(
     timeToDecimal(formValues.week4Actual || "00:00") +
     timeToDecimal(formValues.week5Actual || "00:00");
 
-  const requiredMonthlyHours = workingDaysInMonth * requiredHoursPerDay;
-  const hoursDifference = requiredMonthlyHours - totalHoursWorked;
+  // Paid leave hours (added to logged time)
+  const paidLeaveHours = timeToDecimal(formValues.paidLeaveHours || "00:00");
+  const effectiveHoursWorked = totalHoursWorked + paidLeaveHours;
+
+  // Calculate required hours from sum of expected hours (reactive to changes)
+  const requiredMonthlyHours =
+    timeToDecimal(formValues.week1Expected || "00:00") +
+    timeToDecimal(formValues.week2Expected || "00:00") +
+    timeToDecimal(formValues.week3Expected || "00:00") +
+    timeToDecimal(formValues.week4Expected || "00:00") +
+    timeToDecimal(formValues.week5Expected || "00:00");
+
+  const hoursDifference = requiredMonthlyHours - effectiveHoursWorked;
 
   const leaveEncashmentDays = parseInt(formValues.leaveEncashmentDays || "0");
   const leaveEncashmentHours = leaveEncashmentDays * requiredHoursPerDay;
@@ -219,9 +244,18 @@ function calculatePayroll(
   const perHourRate = requiredMonthlyHours > 0 ? grossSalary / requiredMonthlyHours : 0;
   const perDayRate = workingDaysInMonth > 0 ? grossSalary / workingDaysInMonth : 0;
 
+  // Hours deduction (only if hours short after adjustments)
   const hoursDeduction = adjustedHoursDifference > 0
     ? adjustedHoursDifference * perHourRate * overtimeMultiplier
     : 0;
+
+  // Overtime calculation (when enabled and worked more than required)
+  let overtimeHours = 0;
+  let overtimePay = 0;
+  if (formValues.enableOvertime && effectiveHoursWorked > requiredMonthlyHours) {
+    overtimeHours = effectiveHoursWorked - requiredMonthlyHours;
+    overtimePay = overtimeHours * perHourRate * overtimeMultiplier;
+  }
 
   const advanceDeduction = parseFloat(formValues.advanceDeduction || "0");
   
@@ -232,23 +266,27 @@ function calculatePayroll(
   
   const bonuses = parseFloat(formValues.bonuses || "0");
 
-  const netSalary = grossSalary - hoursDeduction - advanceDeduction + totalAllowances + bonuses;
+  const netSalary = grossSalary - hoursDeduction - advanceDeduction + totalAllowances + bonuses + overtimePay;
 
   return {
     totalHoursWorked,
+    paidLeaveHours,
+    effectiveHoursWorked,
     requiredMonthlyHours,
     hoursDifference,
     adjustedHoursDifference,
     perHourRate,
     perDayRate,
     hoursDeduction,
+    overtimeHours,
+    overtimePay,
     grossSalary,
     netSalary,
     totalAllowances,
   };
 }
 
-// Time input component for HH:MM format
+// Time input component for HH:MM format with stepper buttons
 function TimeInput({ 
   value, 
   onChange, 
@@ -259,51 +297,121 @@ function TimeInput({
 } & Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'>) {
   const [hours, setHours] = useState(() => {
     const [h] = (value || "00:00").split(":");
-    return h || "00";
+    return parseInt(h) || 0;
   });
   const [minutes, setMinutes] = useState(() => {
     const parts = (value || "00:00").split(":");
-    return parts[1] || "00";
+    return parseInt(parts[1]) || 0;
   });
 
   useEffect(() => {
     const [h, m] = (value || "00:00").split(":");
-    setHours(h || "00");
-    setMinutes(m || "00");
+    setHours(parseInt(h) || 0);
+    setMinutes(parseInt(m) || 0);
   }, [value]);
 
+  const updateValue = (h: number, m: number) => {
+    const hStr = Math.max(0, h).toString().padStart(2, "0");
+    const mStr = Math.min(59, Math.max(0, m)).toString().padStart(2, "0");
+    onChange(`${hStr}:${mStr}`);
+  };
+
   const handleHoursChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value.replace(/\D/g, "").slice(0, 3);
+    const val = parseInt(e.target.value.replace(/\D/g, "")) || 0;
     setHours(val);
-    onChange(`${val.padStart(2, "0")}:${minutes.padStart(2, "0")}`);
+    updateValue(val, minutes);
   };
 
   const handleMinutesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let val = parseInt(e.target.value.replace(/\D/g, "").slice(0, 2)) || 0;
+    let val = parseInt(e.target.value.replace(/\D/g, "")) || 0;
     if (val > 59) val = 59;
-    const minStr = val.toString().padStart(2, "0");
-    setMinutes(minStr);
-    onChange(`${hours.padStart(2, "0")}:${minStr}`);
+    setMinutes(val);
+    updateValue(hours, val);
+  };
+
+  const incrementHours = () => updateValue(hours + 1, minutes);
+  const decrementHours = () => updateValue(Math.max(0, hours - 1), minutes);
+  const incrementMinutes = () => {
+    if (minutes >= 45) {
+      updateValue(hours + 1, 0);
+    } else {
+      updateValue(hours, minutes + 15);
+    }
+  };
+  const decrementMinutes = () => {
+    if (minutes < 15) {
+      if (hours > 0) {
+        updateValue(hours - 1, 45);
+      } else {
+        updateValue(0, 0);
+      }
+    } else {
+      updateValue(hours, minutes - 15);
+    }
   };
 
   return (
     <div className="flex items-center gap-1">
-      <Input
-        {...props}
-        type="text"
-        value={hours}
-        onChange={handleHoursChange}
-        className="w-14 text-center font-mono text-sm"
-        placeholder="HH"
-      />
-      <span className="text-muted-foreground font-bold">:</span>
-      <Input
-        type="text"
-        value={minutes}
-        onChange={handleMinutesChange}
-        className="w-14 text-center font-mono text-sm"
-        placeholder="MM"
-      />
+      <div className="flex flex-col">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-5 w-10"
+          onClick={incrementHours}
+          data-testid="button-increment-hours"
+        >
+          <ChevronUp className="h-3 w-3" />
+        </Button>
+        <Input
+          {...props}
+          type="text"
+          value={hours.toString().padStart(2, "0")}
+          onChange={handleHoursChange}
+          className="w-10 text-center font-mono text-sm h-8"
+          data-testid="input-hours"
+        />
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-5 w-10"
+          onClick={decrementHours}
+          data-testid="button-decrement-hours"
+        >
+          <ChevronDown className="h-3 w-3" />
+        </Button>
+      </div>
+      <span className="text-muted-foreground font-bold text-lg">:</span>
+      <div className="flex flex-col">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-5 w-10"
+          onClick={incrementMinutes}
+          data-testid="button-increment-minutes"
+        >
+          <ChevronUp className="h-3 w-3" />
+        </Button>
+        <Input
+          type="text"
+          value={minutes.toString().padStart(2, "0")}
+          onChange={handleMinutesChange}
+          className="w-10 text-center font-mono text-sm h-8"
+          data-testid="input-minutes"
+        />
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-5 w-10"
+          onClick={decrementMinutes}
+          data-testid="button-decrement-minutes"
+        >
+          <ChevronDown className="h-3 w-3" />
+        </Button>
+      </div>
     </div>
   );
 }
@@ -342,6 +450,8 @@ function PayrollFormDialog({
       week4Actual: "00:00",
       week5Expected: "24:00",
       week5Actual: "00:00",
+      paidLeaveHours: "00:00",
+      enableOvertime: false,
       leaveEncashmentDays: "0",
       advanceDeduction: "0",
       allowanceItems: DEFAULT_ALLOWANCES.map(a => ({ label: a.label, value: "0" })),
@@ -421,6 +531,10 @@ function PayrollFormDialog({
         week4Actual: data.week4Actual,
         week5Expected: data.week5Expected,
         week5Actual: data.week5Actual,
+        paidLeaveHours: data.paidLeaveHours,
+        enableOvertime: data.enableOvertime,
+        overtimeHours: calc.overtimeHours.toFixed(2),
+        overtimePay: calc.overtimePay.toFixed(2),
         totalHoursWorked: calc.totalHoursWorked.toFixed(2),
         requiredMonthlyHours: calc.requiredMonthlyHours.toFixed(2),
         hoursDifference: calc.hoursDifference.toFixed(2),
@@ -633,6 +747,78 @@ function PayrollFormDialog({
 
                 <Card>
                   <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-medium">Paid Leave & Overtime</CardTitle>
+                    <CardDescription>Add paid leave hours and configure overtime pay</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-2 gap-6">
+                      <FormField
+                        control={form.control}
+                        name="paidLeaveHours"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Paid Leave Hours (HH:MM)</FormLabel>
+                            <FormControl>
+                              <TimeInput
+                                value={field.value as string}
+                                onChange={field.onChange}
+                                data-testid="input-paid-leave-hours"
+                              />
+                            </FormControl>
+                            <p className="text-xs text-muted-foreground">
+                              These hours are added to logged time
+                            </p>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="enableOvertime"
+                        render={({ field }) => (
+                          <FormItem className="flex flex-row items-start space-x-3 space-y-0 pt-6">
+                            <FormControl>
+                              <Checkbox
+                                checked={field.value}
+                                onCheckedChange={field.onChange}
+                                data-testid="checkbox-enable-overtime"
+                              />
+                            </FormControl>
+                            <div className="space-y-1 leading-none">
+                              <FormLabel>Pay Overtime</FormLabel>
+                              <p className="text-xs text-muted-foreground">
+                                Calculate overtime pay for extra hours worked
+                              </p>
+                            </div>
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                    {formValues.enableOvertime && calculation.overtimeHours > 0 && (
+                      <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-md border border-green-200 dark:border-green-800">
+                        <div className="flex items-center gap-2 text-green-700 dark:text-green-400">
+                          <TrendingUp className="h-4 w-4" />
+                          <span className="font-medium">Overtime Details</span>
+                        </div>
+                        <div className="mt-2 grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <span className="text-muted-foreground">Overtime Hours:</span>
+                            <span className="ml-2 font-medium">{decimalToTime(calculation.overtimeHours)}</span>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Overtime Pay:</span>
+                            <span className="ml-2 font-medium text-green-600 dark:text-green-400">
+                              +PKR {calculation.overtimePay.toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-3">
                     <CardTitle className="text-sm font-medium">Allowances</CardTitle>
                     <CardDescription>Default and custom allowances</CardDescription>
                   </CardHeader>
@@ -806,8 +992,18 @@ function PayrollFormDialog({
                                   <span className="font-mono">{calculation.requiredMonthlyHours.toFixed(1)}h</span>
                                 </div>
                                 <div className="flex justify-between">
-                                  <span className="text-muted-foreground">Hours Worked</span>
+                                  <span className="text-muted-foreground">Hours Logged</span>
                                   <span className="font-mono">{calculation.totalHoursWorked.toFixed(1)}h</span>
+                                </div>
+                                {calculation.paidLeaveHours > 0 && (
+                                  <div className="flex justify-between text-green-600">
+                                    <span>+ Paid Leave Hours</span>
+                                    <span className="font-mono">{calculation.paidLeaveHours.toFixed(1)}h</span>
+                                  </div>
+                                )}
+                                <div className="flex justify-between font-medium">
+                                  <span className="text-muted-foreground">Effective Hours</span>
+                                  <span className="font-mono">{calculation.effectiveHoursWorked.toFixed(1)}h</span>
                                 </div>
                                 <div className="flex justify-between">
                                   <span className="text-muted-foreground">Difference</span>
@@ -820,6 +1016,12 @@ function PayrollFormDialog({
                                   <span className="text-muted-foreground">After Leave Encashment</span>
                                   <span className="font-mono">{calculation.adjustedHoursDifference.toFixed(1)}h</span>
                                 </div>
+                                {formValues.enableOvertime && calculation.overtimeHours > 0 && (
+                                  <div className="flex justify-between text-green-600 font-medium">
+                                    <span>Overtime Hours</span>
+                                    <span className="font-mono">{calculation.overtimeHours.toFixed(1)}h</span>
+                                  </div>
+                                )}
                               </div>
                             </AccordionContent>
                           </AccordionItem>
@@ -883,6 +1085,12 @@ function PayrollFormDialog({
                             <span>Bonuses</span>
                             <span className="font-mono">+ {formatCurrency(parseFloat(formValues.bonuses || "0"))}</span>
                           </div>
+                          {formValues.enableOvertime && calculation.overtimePay > 0 && (
+                            <div className="flex justify-between text-green-600 font-medium">
+                              <span>Overtime Pay</span>
+                              <span className="font-mono">+ {formatCurrency(calculation.overtimePay)}</span>
+                            </div>
+                          )}
                         </div>
 
                         <Separator />

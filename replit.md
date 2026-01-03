@@ -58,6 +58,10 @@ A Human Resource Management system designed for a gaming company with Employee M
 - `allowance_details` field stores dynamic allowances as JSON text
 
 ## Recent Changes
+- 2026-01-03: Improved TimeInput with stepper buttons (+/- for hours and minutes in 15-min increments)
+- 2026-01-03: Added paid leave hours field (adds to logged time in calculation)
+- 2026-01-03: Added overtime section with toggle checkbox (calculates overtime pay when enabled)
+- 2026-01-03: Calculation now uses sum of expected hours (reactive to changes)
 - 2026-01-03: Changed employee ID to auto-incrementing integer (primary key `id`)
 - 2026-01-03: Added working days input at payroll time (auto-excludes Sundays)
 - 2026-01-03: Changed weekly hours to HH:MM time format

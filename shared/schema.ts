@@ -113,6 +113,14 @@ export const payrollRecords = pgTable("payroll_records", {
   week5Expected: text("week5_expected").default("00:00"),
   week5Actual: text("week5_actual").default("00:00"),
   
+  // Paid leave hours (added to logged time)
+  paidLeaveHours: text("paid_leave_hours").default("00:00"),
+  
+  // Overtime settings
+  enableOvertime: boolean("enable_overtime").default(false),
+  overtimeHours: decimal("overtime_hours", { precision: 8, scale: 2 }).default("0"),
+  overtimePay: decimal("overtime_pay", { precision: 12, scale: 2 }).default("0"),
+  
   // Calculated fields (stored as decimal for precision)
   totalHoursWorked: decimal("total_hours_worked", { precision: 8, scale: 2 }).default("0"),
   requiredMonthlyHours: decimal("required_monthly_hours", { precision: 8, scale: 2 }).default("0"),
