@@ -499,7 +499,7 @@ function PayrollFormDialog({
                             <SelectContent>
                               {employees.map((emp) => (
                                 <SelectItem key={emp.id} value={emp.id.toString()}>
-                                  {emp.firstName} {emp.lastName} ({emp.employeeId})
+                                  {emp.firstName} {emp.lastName} (ID: {emp.id})
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -789,7 +789,7 @@ function PayrollFormDialog({
                       <>
                         <div className="p-3 rounded-md bg-muted/50">
                           <div className="text-sm font-medium">{selectedEmployee.firstName} {selectedEmployee.lastName}</div>
-                          <div className="text-xs text-muted-foreground">{selectedEmployee.employeeId}</div>
+                          <div className="text-xs text-muted-foreground">ID: {selectedEmployee.id}</div>
                         </div>
 
                         <Accordion type="single" collapsible defaultValue="summary" className="w-full">
@@ -1002,7 +1002,7 @@ function PayrollDetailDialog({
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="font-medium">{record.employee.firstName} {record.employee.lastName}</h3>
-                  <p className="text-sm text-muted-foreground">{record.employee.employeeId}</p>
+                  <p className="text-sm text-muted-foreground">ID: {record.employee.id}</p>
                 </div>
                 <div className="text-right">
                   <div className="text-sm text-muted-foreground">{months[record.month - 1]} {record.year}</div>
@@ -1263,7 +1263,7 @@ export default function Payroll() {
                             {record.employee.firstName} {record.employee.lastName}
                           </span>
                           <span className="text-sm text-muted-foreground">
-                            {record.employee.employeeId}
+                            ID: {record.employee.id}
                           </span>
                         </div>
                       </TableCell>

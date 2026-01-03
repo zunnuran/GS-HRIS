@@ -134,7 +134,6 @@ export class DatabaseStorage implements IStorage {
     const result = await db
       .select({
         id: employees.id,
-        employeeId: employees.employeeId,
         firstName: employees.firstName,
         lastName: employees.lastName,
         email: employees.email,
@@ -161,7 +160,6 @@ export class DatabaseStorage implements IStorage {
     const [result] = await db
       .select({
         id: employees.id,
-        employeeId: employees.employeeId,
         firstName: employees.firstName,
         lastName: employees.lastName,
         email: employees.email,

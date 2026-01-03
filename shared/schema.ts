@@ -47,7 +47,6 @@ export type Department = typeof departments.$inferSelect;
 // Employees table with all payroll-related attributes
 export const employees = pgTable("employees", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
-  employeeId: text("employee_id").notNull().unique(),
   firstName: text("first_name").notNull(),
   lastName: text("last_name").notNull(),
   email: text("email"),

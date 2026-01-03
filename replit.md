@@ -58,6 +58,7 @@ A Human Resource Management system designed for a gaming company with Employee M
 - `allowance_details` field stores dynamic allowances as JSON text
 
 ## Recent Changes
+- 2026-01-03: Changed employee ID to auto-incrementing integer (primary key `id`)
 - 2026-01-03: Added working days input at payroll time (auto-excludes Sundays)
 - 2026-01-03: Changed weekly hours to HH:MM time format
 - 2026-01-03: Added dynamic allowance fields with 4 defaults plus custom fields

@@ -67,7 +67,6 @@ import {
 import type { EmployeeWithDepartment, Department } from "@shared/schema";
 
 const employeeFormSchema = z.object({
-  employeeId: z.string().min(1, "Employee ID is required"),
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
   email: z.string().email("Invalid email").optional().or(z.literal("")),
@@ -101,7 +100,6 @@ function EmployeeFormDialog({
   const form = useForm<EmployeeFormValues>({
     resolver: zodResolver(employeeFormSchema),
     defaultValues: {
-      employeeId: employee?.employeeId ?? "",
       firstName: employee?.firstName ?? "",
       lastName: employee?.lastName ?? "",
       email: employee?.email ?? "",
@@ -185,47 +183,6 @@ function EmployeeFormDialog({
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="employeeId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Employee ID</FormLabel>
-                    <FormControl>
-                      <Input 
-                        placeholder="EMP001" 
-                        {...field} 
-                        data-testid="input-employee-id"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="status"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Status</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger data-testid="select-status">
-                          <SelectValue placeholder="Select status" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="active">Active</SelectItem>
-                        <SelectItem value="inactive">Inactive</SelectItem>
-                        <SelectItem value="on_leave">On Leave</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
 
             <div className="grid grid-cols-2 gap-4">
               <FormField
@@ -507,7 +464,7 @@ export default function Employees() {
     return (
       emp.firstName.toLowerCase().includes(searchLower) ||
       emp.lastName.toLowerCase().includes(searchLower) ||
-      emp.employeeId.toLowerCase().includes(searchLower) ||
+      emp.id.toString().includes(searchLower) ||
       emp.email?.toLowerCase().includes(searchLower)
     );
   });
@@ -617,7 +574,7 @@ export default function Employees() {
                             {employee.firstName} {employee.lastName}
                           </span>
                           <span className="text-sm text-muted-foreground">
-                            {employee.employeeId}
+                            ID: {employee.id}
                           </span>
                         </div>
                       </TableCell>
