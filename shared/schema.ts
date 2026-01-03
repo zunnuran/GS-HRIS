@@ -116,6 +116,9 @@ export const payrollRecords = pgTable("payroll_records", {
   // Paid leaves count (e.g., 1, 1.5, 2) - converted to hours based on employee's required hours per day
   paidLeaves: decimal("paid_leaves", { precision: 4, scale: 2 }).default("0"),
   
+  // Cap logged hours to expected hours per week
+  capLoggedHours: boolean("cap_logged_hours").default(true),
+  
   // Overtime settings
   enableOvertime: boolean("enable_overtime").default(false),
   overtimeHours: decimal("overtime_hours", { precision: 8, scale: 2 }).default("0"),

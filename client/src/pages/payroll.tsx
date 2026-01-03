@@ -160,6 +160,7 @@ const payrollFormSchema = z.object({
   week5Expected: z.string().default("00:00"),
   week5Actual: z.string().default("00:00"),
   paidLeaves: z.string().default("0"),
+  capLoggedHours: z.boolean().default(true),
   enableOvertime: z.boolean().default(false),
   leaveEncashmentDays: z.string().default("0"),
   advanceDeduction: z.string().default("0"),
@@ -218,26 +219,37 @@ function calculatePayroll(
   const workingDaysInMonth = parseInt(formValues.workingDaysInMonth) || 26;
   const overtimeMultiplier = parseFloat(employee.overtimeMultiplier) || 1.0;
 
-  // Convert HH:MM to decimal and sum actual hours
-  const totalHoursWorked =
-    timeToDecimal(formValues.week1Actual || "00:00") +
-    timeToDecimal(formValues.week2Actual || "00:00") +
-    timeToDecimal(formValues.week3Actual || "00:00") +
-    timeToDecimal(formValues.week4Actual || "00:00") +
-    timeToDecimal(formValues.week5Actual || "00:00");
+  // Convert HH:MM to decimal and sum actual hours (with optional capping)
+  const capHours = formValues.capLoggedHours;
+  
+  const week1Expected = timeToDecimal(formValues.week1Expected || "00:00");
+  const week2Expected = timeToDecimal(formValues.week2Expected || "00:00");
+  const week3Expected = timeToDecimal(formValues.week3Expected || "00:00");
+  const week4Expected = timeToDecimal(formValues.week4Expected || "00:00");
+  const week5Expected = timeToDecimal(formValues.week5Expected || "00:00");
+  
+  const week1Actual = timeToDecimal(formValues.week1Actual || "00:00");
+  const week2Actual = timeToDecimal(formValues.week2Actual || "00:00");
+  const week3Actual = timeToDecimal(formValues.week3Actual || "00:00");
+  const week4Actual = timeToDecimal(formValues.week4Actual || "00:00");
+  const week5Actual = timeToDecimal(formValues.week5Actual || "00:00");
+  
+  // Cap each week's actual hours to expected if capping is enabled
+  const cappedWeek1 = capHours ? Math.min(week1Actual, week1Expected) : week1Actual;
+  const cappedWeek2 = capHours ? Math.min(week2Actual, week2Expected) : week2Actual;
+  const cappedWeek3 = capHours ? Math.min(week3Actual, week3Expected) : week3Actual;
+  const cappedWeek4 = capHours ? Math.min(week4Actual, week4Expected) : week4Actual;
+  const cappedWeek5 = capHours ? Math.min(week5Actual, week5Expected) : week5Actual;
+  
+  const totalHoursWorked = cappedWeek1 + cappedWeek2 + cappedWeek3 + cappedWeek4 + cappedWeek5;
 
   // Paid leaves (count) - converted to hours based on required hours per day
   const paidLeaves = parseFloat(formValues.paidLeaves || "0");
   const paidLeaveHours = paidLeaves * requiredHoursPerDay;
   const effectiveHoursWorked = totalHoursWorked + paidLeaveHours;
 
-  // Calculate required hours from sum of expected hours (reactive to changes)
-  const requiredMonthlyHours =
-    timeToDecimal(formValues.week1Expected || "00:00") +
-    timeToDecimal(formValues.week2Expected || "00:00") +
-    timeToDecimal(formValues.week3Expected || "00:00") +
-    timeToDecimal(formValues.week4Expected || "00:00") +
-    timeToDecimal(formValues.week5Expected || "00:00");
+  // Calculate required hours from sum of expected hours (already computed above)
+  const requiredMonthlyHours = week1Expected + week2Expected + week3Expected + week4Expected + week5Expected;
 
   const hoursDifference = requiredMonthlyHours - effectiveHoursWorked;
 
@@ -473,6 +485,7 @@ function PayrollFormDialog({
       week5Expected: normalizeTimeValue(editRecord.week5Expected),
       week5Actual: normalizeTimeValue(editRecord.week5Actual),
       paidLeaves: editRecord.paidLeaves?.toString() || "0",
+      capLoggedHours: editRecord.capLoggedHours ?? true,
       enableOvertime: editRecord.enableOvertime || false,
       leaveEncashmentDays: editRecord.leaveEncashmentDays?.toString() || "0",
       advanceDeduction: editRecord.advanceDeduction?.toString() || "0",
@@ -496,6 +509,7 @@ function PayrollFormDialog({
       week5Expected: "24:00",
       week5Actual: "00:00",
       paidLeaves: "0",
+      capLoggedHours: true,
       enableOvertime: false,
       leaveEncashmentDays: "0",
       advanceDeduction: "0",
@@ -526,6 +540,7 @@ function PayrollFormDialog({
         week5Expected: normalizeTimeValue(editRecord.week5Expected),
         week5Actual: normalizeTimeValue(editRecord.week5Actual),
         paidLeaves: editRecord.paidLeaves?.toString() || "0",
+        capLoggedHours: editRecord.capLoggedHours ?? true,
         enableOvertime: editRecord.enableOvertime || false,
         leaveEncashmentDays: editRecord.leaveEncashmentDays?.toString() || "0",
         advanceDeduction: editRecord.advanceDeduction?.toString() || "0",
@@ -553,6 +568,7 @@ function PayrollFormDialog({
         week5Expected: "24:00",
         week5Actual: "00:00",
         paidLeaves: "0",
+        capLoggedHours: true,
         enableOvertime: false,
         leaveEncashmentDays: "0",
         advanceDeduction: "0",
@@ -633,6 +649,7 @@ function PayrollFormDialog({
       week5Expected: data.week5Expected,
       week5Actual: data.week5Actual,
       paidLeaves: parseFloat(data.paidLeaves || "0").toFixed(2),
+      capLoggedHours: data.capLoggedHours,
       enableOvertime: data.enableOvertime,
       overtimeHours: calc.overtimeHours.toFixed(2),
       overtimePay: calc.overtimePay.toFixed(2),
@@ -830,6 +847,29 @@ function PayrollFormDialog({
                     <CardDescription>Enter expected and actual hours for each week in hours:minutes format</CardDescription>
                   </CardHeader>
                   <CardContent>
+                    <FormField
+                      control={form.control}
+                      name="capLoggedHours"
+                      render={({ field }) => (
+                        <FormItem className="flex flex-row items-center gap-3 mb-4 p-3 rounded-md bg-muted/50">
+                          <FormControl>
+                            <Checkbox
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                              data-testid="checkbox-cap-logged-hours"
+                            />
+                          </FormControl>
+                          <div className="space-y-0.5">
+                            <FormLabel className="text-sm font-medium cursor-pointer">
+                              Cap logged hours at expected
+                            </FormLabel>
+                            <p className="text-xs text-muted-foreground">
+                              When enabled, actual hours cannot exceed expected hours per week
+                            </p>
+                          </div>
+                        </FormItem>
+                      )}
+                    />
                     <div className="space-y-4">
                       {[1, 2, 3, 4, 5].map((week) => (
                         <div key={week} className="grid grid-cols-5 gap-4 items-center">
