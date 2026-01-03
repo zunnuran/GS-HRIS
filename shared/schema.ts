@@ -99,19 +99,22 @@ export const payrollRecords = pgTable("payroll_records", {
   month: integer("month").notNull(),
   year: integer("year").notNull(),
   
-  // Weekly hours (expected vs actual for 5 weeks)
-  week1Expected: decimal("week1_expected", { precision: 6, scale: 2 }).default("0"),
-  week1Actual: decimal("week1_actual", { precision: 6, scale: 2 }).default("0"),
-  week2Expected: decimal("week2_expected", { precision: 6, scale: 2 }).default("0"),
-  week2Actual: decimal("week2_actual", { precision: 6, scale: 2 }).default("0"),
-  week3Expected: decimal("week3_expected", { precision: 6, scale: 2 }).default("0"),
-  week3Actual: decimal("week3_actual", { precision: 6, scale: 2 }).default("0"),
-  week4Expected: decimal("week4_expected", { precision: 6, scale: 2 }).default("0"),
-  week4Actual: decimal("week4_actual", { precision: 6, scale: 2 }).default("0"),
-  week5Expected: decimal("week5_expected", { precision: 6, scale: 2 }).default("0"),
-  week5Actual: decimal("week5_actual", { precision: 6, scale: 2 }).default("0"),
+  // Working days for this specific payroll period (excluding Sundays by default)
+  workingDaysInMonth: integer("working_days_in_month").notNull().default(26),
   
-  // Calculated fields
+  // Weekly hours stored as HH:MM format (expected vs actual for 5 weeks)
+  week1Expected: text("week1_expected").default("00:00"),
+  week1Actual: text("week1_actual").default("00:00"),
+  week2Expected: text("week2_expected").default("00:00"),
+  week2Actual: text("week2_actual").default("00:00"),
+  week3Expected: text("week3_expected").default("00:00"),
+  week3Actual: text("week3_actual").default("00:00"),
+  week4Expected: text("week4_expected").default("00:00"),
+  week4Actual: text("week4_actual").default("00:00"),
+  week5Expected: text("week5_expected").default("00:00"),
+  week5Actual: text("week5_actual").default("00:00"),
+  
+  // Calculated fields (stored as decimal for precision)
   totalHoursWorked: decimal("total_hours_worked", { precision: 8, scale: 2 }).default("0"),
   requiredMonthlyHours: decimal("required_monthly_hours", { precision: 8, scale: 2 }).default("0"),
   hoursDifference: decimal("hours_difference", { precision: 8, scale: 2 }).default("0"),
@@ -127,6 +130,9 @@ export const payrollRecords = pgTable("payroll_records", {
   // Deductions and adjustments
   hoursDeduction: decimal("hours_deduction", { precision: 12, scale: 2 }).default("0"),
   advanceDeduction: decimal("advance_deduction", { precision: 12, scale: 2 }).default("0"),
+  
+  // Dynamic allowances stored as JSON: [{label: string, value: number}]
+  allowanceDetails: text("allowance_details").default("[]"),
   allowances: decimal("allowances", { precision: 12, scale: 2 }).default("0"),
   bonuses: decimal("bonuses", { precision: 12, scale: 2 }).default("0"),
   
@@ -141,6 +147,20 @@ export const payrollRecords = pgTable("payroll_records", {
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
+
+// Type for allowance item
+export interface AllowanceItem {
+  label: string;
+  value: number;
+}
+
+// Default allowance types
+export const DEFAULT_ALLOWANCES = [
+  { label: "Personal Development Fund (PDF)", value: 0 },
+  { label: "Child Education", value: 0 },
+  { label: "Inpatient Allowance", value: 0 },
+  { label: "Gym Allowance", value: 0 },
+];
 
 export const payrollRecordsRelations = relations(payrollRecords, ({ one }) => ({
   employee: one(employees, {

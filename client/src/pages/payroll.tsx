@@ -38,7 +38,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { useForm } from "react-hook-form";
+import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { 
@@ -51,7 +51,9 @@ import {
   Clock,
   DollarSign,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Trash2,
+  Calendar
 } from "lucide-react";
 import {
   Accordion,
@@ -59,25 +61,102 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import type { PayrollRecordWithEmployee, Employee } from "@shared/schema";
+import type { PayrollRecordWithEmployee, Employee, AllowanceItem } from "@shared/schema";
+import { DEFAULT_ALLOWANCES } from "@shared/schema";
+
+// Helper functions for HH:MM time format (with backward compatibility for legacy decimal values)
+function timeToDecimal(time: string | null | undefined): number {
+  if (!time || time === "00:00" || time === "0") return 0;
+  
+  // Check if it's already a decimal number (legacy format)
+  if (!time.includes(":")) {
+    const num = parseFloat(time);
+    return isNaN(num) ? 0 : num;
+  }
+  
+  // Parse HH:MM format
+  const parts = time.split(":");
+  const hours = parseInt(parts[0]) || 0;
+  const minutes = parseInt(parts[1]) || 0;
+  return hours + (minutes / 60);
+}
+
+function decimalToTime(decimal: number): string {
+  if (isNaN(decimal) || decimal === 0) return "00:00";
+  const hours = Math.floor(decimal);
+  const minutes = Math.round((decimal - hours) * 60);
+  return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`;
+}
+
+// Normalize time value - converts legacy decimals to HH:MM format
+function normalizeTimeValue(value: string | null | undefined): string {
+  if (!value || value === "0" || value === "00:00") return "00:00";
+  
+  // Already in HH:MM format
+  if (value.includes(":")) return value;
+  
+  // Convert legacy decimal to HH:MM
+  const decimal = parseFloat(value);
+  if (isNaN(decimal)) return "00:00";
+  return decimalToTime(decimal);
+}
+
+function formatTimeDisplay(time: string | null | undefined): string {
+  if (!time || time === "00:00" || time === "0") return "0h 0m";
+  
+  // Handle legacy decimal format
+  if (!time.includes(":")) {
+    const decimal = parseFloat(time);
+    if (isNaN(decimal)) return "0h 0m";
+    const hours = Math.floor(decimal);
+    const minutes = Math.round((decimal - hours) * 60);
+    return `${hours}h ${minutes}m`;
+  }
+  
+  const parts = time.split(":");
+  const hours = parseInt(parts[0]) || 0;
+  const minutes = parseInt(parts[1]) || 0;
+  return `${hours}h ${minutes}m`;
+}
+
+// Calculate working days in a month (excluding Sundays)
+function calculateWorkingDays(month: number, year: number): number {
+  const daysInMonth = new Date(year, month, 0).getDate();
+  let workingDays = 0;
+  
+  for (let day = 1; day <= daysInMonth; day++) {
+    const date = new Date(year, month - 1, day);
+    if (date.getDay() !== 0) { // 0 is Sunday
+      workingDays++;
+    }
+  }
+  
+  return workingDays;
+}
+
+const allowanceItemSchema = z.object({
+  label: z.string().min(1, "Label is required"),
+  value: z.string().default("0"),
+});
 
 const payrollFormSchema = z.object({
   employeeId: z.string().min(1, "Employee is required"),
   month: z.string().min(1, "Month is required"),
   year: z.string().min(1, "Year is required"),
-  week1Expected: z.string().default("0"),
-  week1Actual: z.string().default("0"),
-  week2Expected: z.string().default("0"),
-  week2Actual: z.string().default("0"),
-  week3Expected: z.string().default("0"),
-  week3Actual: z.string().default("0"),
-  week4Expected: z.string().default("0"),
-  week4Actual: z.string().default("0"),
-  week5Expected: z.string().default("0"),
-  week5Actual: z.string().default("0"),
+  workingDaysInMonth: z.string().default("26"),
+  week1Expected: z.string().default("00:00"),
+  week1Actual: z.string().default("00:00"),
+  week2Expected: z.string().default("00:00"),
+  week2Actual: z.string().default("00:00"),
+  week3Expected: z.string().default("00:00"),
+  week3Actual: z.string().default("00:00"),
+  week4Expected: z.string().default("00:00"),
+  week4Actual: z.string().default("00:00"),
+  week5Expected: z.string().default("00:00"),
+  week5Actual: z.string().default("00:00"),
   leaveEncashmentDays: z.string().default("0"),
   advanceDeduction: z.string().default("0"),
-  allowances: z.string().default("0"),
+  allowanceItems: z.array(allowanceItemSchema).default([]),
   bonuses: z.string().default("0"),
   remarks: z.string().optional(),
   status: z.string().default("draft"),
@@ -95,6 +174,7 @@ interface PayrollCalculation {
   hoursDeduction: number;
   grossSalary: number;
   netSalary: number;
+  totalAllowances: number;
 }
 
 function calculatePayroll(
@@ -112,40 +192,47 @@ function calculatePayroll(
       hoursDeduction: 0,
       grossSalary: 0,
       netSalary: 0,
+      totalAllowances: 0,
     };
   }
 
   const grossSalary = parseFloat(employee.grossSalary) || 0;
   const requiredHoursPerDay = parseFloat(employee.requiredHoursPerDay) || 8;
-  const workingDaysPerMonth = employee.workingDaysPerMonth || 26;
+  const workingDaysInMonth = parseInt(formValues.workingDaysInMonth) || 26;
   const overtimeMultiplier = parseFloat(employee.overtimeMultiplier) || 1.0;
 
+  // Convert HH:MM to decimal and sum
   const totalHoursWorked =
-    parseFloat(formValues.week1Actual || "0") +
-    parseFloat(formValues.week2Actual || "0") +
-    parseFloat(formValues.week3Actual || "0") +
-    parseFloat(formValues.week4Actual || "0") +
-    parseFloat(formValues.week5Actual || "0");
+    timeToDecimal(formValues.week1Actual || "00:00") +
+    timeToDecimal(formValues.week2Actual || "00:00") +
+    timeToDecimal(formValues.week3Actual || "00:00") +
+    timeToDecimal(formValues.week4Actual || "00:00") +
+    timeToDecimal(formValues.week5Actual || "00:00");
 
-  const requiredMonthlyHours = workingDaysPerMonth * requiredHoursPerDay;
+  const requiredMonthlyHours = workingDaysInMonth * requiredHoursPerDay;
   const hoursDifference = requiredMonthlyHours - totalHoursWorked;
 
   const leaveEncashmentDays = parseInt(formValues.leaveEncashmentDays || "0");
   const leaveEncashmentHours = leaveEncashmentDays * requiredHoursPerDay;
   const adjustedHoursDifference = hoursDifference - leaveEncashmentHours;
 
-  const perHourRate = grossSalary / requiredMonthlyHours;
-  const perDayRate = grossSalary / workingDaysPerMonth;
+  const perHourRate = requiredMonthlyHours > 0 ? grossSalary / requiredMonthlyHours : 0;
+  const perDayRate = workingDaysInMonth > 0 ? grossSalary / workingDaysInMonth : 0;
 
   const hoursDeduction = adjustedHoursDifference > 0
     ? adjustedHoursDifference * perHourRate * overtimeMultiplier
     : 0;
 
   const advanceDeduction = parseFloat(formValues.advanceDeduction || "0");
-  const allowances = parseFloat(formValues.allowances || "0");
+  
+  // Sum all allowance values
+  const totalAllowances = formValues.allowanceItems?.reduce((sum, item) => {
+    return sum + (parseFloat(item.value) || 0);
+  }, 0) || 0;
+  
   const bonuses = parseFloat(formValues.bonuses || "0");
 
-  const netSalary = grossSalary - hoursDeduction - advanceDeduction + allowances + bonuses;
+  const netSalary = grossSalary - hoursDeduction - advanceDeduction + totalAllowances + bonuses;
 
   return {
     totalHoursWorked,
@@ -157,7 +244,68 @@ function calculatePayroll(
     hoursDeduction,
     grossSalary,
     netSalary,
+    totalAllowances,
   };
+}
+
+// Time input component for HH:MM format
+function TimeInput({ 
+  value, 
+  onChange, 
+  ...props 
+}: { 
+  value: string; 
+  onChange: (value: string) => void;
+} & Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'>) {
+  const [hours, setHours] = useState(() => {
+    const [h] = (value || "00:00").split(":");
+    return h || "00";
+  });
+  const [minutes, setMinutes] = useState(() => {
+    const parts = (value || "00:00").split(":");
+    return parts[1] || "00";
+  });
+
+  useEffect(() => {
+    const [h, m] = (value || "00:00").split(":");
+    setHours(h || "00");
+    setMinutes(m || "00");
+  }, [value]);
+
+  const handleHoursChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value.replace(/\D/g, "").slice(0, 3);
+    setHours(val);
+    onChange(`${val.padStart(2, "0")}:${minutes.padStart(2, "0")}`);
+  };
+
+  const handleMinutesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let val = parseInt(e.target.value.replace(/\D/g, "").slice(0, 2)) || 0;
+    if (val > 59) val = 59;
+    const minStr = val.toString().padStart(2, "0");
+    setMinutes(minStr);
+    onChange(`${hours.padStart(2, "0")}:${minStr}`);
+  };
+
+  return (
+    <div className="flex items-center gap-1">
+      <Input
+        {...props}
+        type="text"
+        value={hours}
+        onChange={handleHoursChange}
+        className="w-14 text-center font-mono text-sm"
+        placeholder="HH"
+      />
+      <span className="text-muted-foreground font-bold">:</span>
+      <Input
+        type="text"
+        value={minutes}
+        onChange={handleMinutesChange}
+        className="w-14 text-center font-mono text-sm"
+        placeholder="MM"
+      />
+    </div>
+  );
 }
 
 function PayrollFormDialog({
@@ -174,29 +322,38 @@ function PayrollFormDialog({
   const currentMonth = (currentDate.getMonth() + 1).toString();
   const currentYear = currentDate.getFullYear().toString();
 
+  // Calculate default working days for current month
+  const defaultWorkingDays = calculateWorkingDays(parseInt(currentMonth), parseInt(currentYear));
+
   const form = useForm<PayrollFormValues>({
     resolver: zodResolver(payrollFormSchema),
     defaultValues: {
       employeeId: "",
       month: currentMonth,
       year: currentYear,
-      week1Expected: "42",
-      week1Actual: "0",
-      week2Expected: "42",
-      week2Actual: "0",
-      week3Expected: "42",
-      week3Actual: "0",
-      week4Expected: "35",
-      week4Actual: "0",
-      week5Expected: "21",
-      week5Actual: "0",
+      workingDaysInMonth: defaultWorkingDays.toString(),
+      week1Expected: "48:00",
+      week1Actual: "00:00",
+      week2Expected: "48:00",
+      week2Actual: "00:00",
+      week3Expected: "48:00",
+      week3Actual: "00:00",
+      week4Expected: "40:00",
+      week4Actual: "00:00",
+      week5Expected: "24:00",
+      week5Actual: "00:00",
       leaveEncashmentDays: "0",
       advanceDeduction: "0",
-      allowances: "0",
+      allowanceItems: DEFAULT_ALLOWANCES.map(a => ({ label: a.label, value: "0" })),
       bonuses: "0",
       remarks: "",
       status: "draft",
     },
+  });
+
+  const { fields: allowanceFields, append: appendAllowance, remove: removeAllowance } = useFieldArray({
+    control: form.control,
+    name: "allowanceItems",
   });
 
   const formValues = form.watch();
@@ -209,24 +366,51 @@ function PayrollFormDialog({
     [selectedEmployee, formValues]
   );
 
+  // Update working days when month/year changes
+  useEffect(() => {
+    const month = parseInt(formValues.month);
+    const year = parseInt(formValues.year);
+    if (month && year) {
+      const workingDays = calculateWorkingDays(month, year);
+      form.setValue("workingDaysInMonth", workingDays.toString());
+    }
+  }, [formValues.month, formValues.year, form]);
+
+  // Update expected hours when employee or working days change
   useEffect(() => {
     if (selectedEmployee) {
       const hoursPerDay = parseFloat(selectedEmployee.requiredHoursPerDay) || 8;
-      form.setValue("week1Expected", (hoursPerDay * 6).toString());
-      form.setValue("week2Expected", (hoursPerDay * 6).toString());
-      form.setValue("week3Expected", (hoursPerDay * 6).toString());
-      form.setValue("week4Expected", (hoursPerDay * 5).toString());
-      form.setValue("week5Expected", (hoursPerDay * 3).toString());
+      const totalExpected = parseInt(formValues.workingDaysInMonth) * hoursPerDay;
+      
+      // Distribute across weeks (6 days each for first 4 weeks, remainder for week 5)
+      const weekHours = hoursPerDay * 6;
+      form.setValue("week1Expected", decimalToTime(weekHours));
+      form.setValue("week2Expected", decimalToTime(weekHours));
+      form.setValue("week3Expected", decimalToTime(weekHours));
+      form.setValue("week4Expected", decimalToTime(weekHours));
+      
+      const remainingDays = parseInt(formValues.workingDaysInMonth) - 24;
+      form.setValue("week5Expected", decimalToTime(Math.max(0, remainingDays * hoursPerDay)));
     }
-  }, [selectedEmployee, form]);
+  }, [selectedEmployee, formValues.workingDaysInMonth, form]);
 
   const createMutation = useMutation({
     mutationFn: async (data: PayrollFormValues) => {
       const calc = calculatePayroll(selectedEmployee, data);
+      
+      // Convert allowance items to JSON string
+      const allowanceDetails = JSON.stringify(
+        data.allowanceItems?.map(item => ({
+          label: item.label,
+          value: parseFloat(item.value) || 0
+        })) || []
+      );
+      
       const payload = {
         employeeId: parseInt(data.employeeId),
         month: parseInt(data.month),
         year: parseInt(data.year),
+        workingDaysInMonth: parseInt(data.workingDaysInMonth),
         week1Expected: data.week1Expected,
         week1Actual: data.week1Actual,
         week2Expected: data.week2Expected,
@@ -237,19 +421,20 @@ function PayrollFormDialog({
         week4Actual: data.week4Actual,
         week5Expected: data.week5Expected,
         week5Actual: data.week5Actual,
-        totalHoursWorked: calc.totalHoursWorked.toString(),
-        requiredMonthlyHours: calc.requiredMonthlyHours.toString(),
-        hoursDifference: calc.hoursDifference.toString(),
+        totalHoursWorked: calc.totalHoursWorked.toFixed(2),
+        requiredMonthlyHours: calc.requiredMonthlyHours.toFixed(2),
+        hoursDifference: calc.hoursDifference.toFixed(2),
         leaveEncashmentDays: parseInt(data.leaveEncashmentDays || "0"),
-        adjustedHoursDifference: calc.adjustedHoursDifference.toString(),
-        perHourRate: calc.perHourRate.toString(),
-        perDayRate: calc.perDayRate.toString(),
-        hoursDeduction: calc.hoursDeduction.toString(),
+        adjustedHoursDifference: calc.adjustedHoursDifference.toFixed(2),
+        perHourRate: calc.perHourRate.toFixed(2),
+        perDayRate: calc.perDayRate.toFixed(2),
+        hoursDeduction: calc.hoursDeduction.toFixed(2),
         advanceDeduction: data.advanceDeduction || "0",
-        allowances: data.allowances || "0",
+        allowanceDetails: allowanceDetails,
+        allowances: calc.totalAllowances.toFixed(2),
         bonuses: data.bonuses || "0",
-        grossSalary: calc.grossSalary.toString(),
-        netSalary: calc.netSalary.toString(),
+        grossSalary: calc.grossSalary.toFixed(2),
+        netSalary: calc.netSalary.toFixed(2),
         remarks: data.remarks || null,
         status: data.status,
       };
@@ -286,7 +471,7 @@ function PayrollFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl max-h-[95vh] overflow-y-auto">
+      <DialogContent className="max-w-6xl max-h-[95vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Create Payroll Record</DialogTitle>
         </DialogHeader>
@@ -323,7 +508,7 @@ function PayrollFormDialog({
                         </FormItem>
                       )}
                     />
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-3 gap-4">
                       <FormField
                         control={form.control}
                         name="month"
@@ -365,58 +550,81 @@ function PayrollFormDialog({
                           </FormItem>
                         )}
                       />
+                      <FormField
+                        control={form.control}
+                        name="workingDaysInMonth"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="flex items-center gap-1">
+                              <Calendar className="h-3 w-3" />
+                              Working Days
+                            </FormLabel>
+                            <FormControl>
+                              <Input 
+                                type="number" 
+                                {...field} 
+                                data-testid="input-working-days"
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
                     </div>
+                    <p className="text-xs text-muted-foreground">
+                      Working days are automatically calculated excluding Sundays. Adjust if needed.
+                    </p>
                   </CardContent>
                 </Card>
 
                 <Card>
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-sm font-medium">Weekly Hours</CardTitle>
-                    <CardDescription>Enter expected and actual hours for each week</CardDescription>
+                    <CardTitle className="text-sm font-medium">Weekly Hours (HH:MM)</CardTitle>
+                    <CardDescription>Enter expected and actual hours for each week in hours:minutes format</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
                       {[1, 2, 3, 4, 5].map((week) => (
-                        <div key={week} className="grid grid-cols-3 gap-4 items-end">
-                          <div className="text-sm font-medium text-muted-foreground pt-6">
+                        <div key={week} className="grid grid-cols-5 gap-4 items-center">
+                          <div className="text-sm font-medium text-muted-foreground">
                             Week {week}
                           </div>
-                          <FormField
-                            control={form.control}
-                            name={`week${week}Expected` as keyof PayrollFormValues}
-                            render={({ field }) => (
-                              <FormItem>
-                                {week === 1 && <FormLabel className="text-xs">Expected</FormLabel>}
-                                <FormControl>
-                                  <Input 
-                                    type="number" 
-                                    step="0.5"
-                                    {...field} 
-                                    className="font-mono text-sm"
-                                    data-testid={`input-week${week}-expected`}
-                                  />
-                                </FormControl>
-                              </FormItem>
-                            )}
-                          />
-                          <FormField
-                            control={form.control}
-                            name={`week${week}Actual` as keyof PayrollFormValues}
-                            render={({ field }) => (
-                              <FormItem>
-                                {week === 1 && <FormLabel className="text-xs">Actual</FormLabel>}
-                                <FormControl>
-                                  <Input 
-                                    type="number" 
-                                    step="0.5"
-                                    {...field}
-                                    className="font-mono text-sm"
-                                    data-testid={`input-week${week}-actual`}
-                                  />
-                                </FormControl>
-                              </FormItem>
-                            )}
-                          />
+                          <div className="col-span-2">
+                            {week === 1 && <div className="text-xs text-muted-foreground mb-1">Expected</div>}
+                            <FormField
+                              control={form.control}
+                              name={`week${week}Expected` as keyof PayrollFormValues}
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormControl>
+                                    <TimeInput
+                                      value={field.value as string}
+                                      onChange={field.onChange}
+                                      data-testid={`input-week${week}-expected`}
+                                    />
+                                  </FormControl>
+                                </FormItem>
+                              )}
+                            />
+                          </div>
+                          <div className="col-span-2">
+                            {week === 1 && <div className="text-xs text-muted-foreground mb-1">Actual</div>}
+                            <FormField
+                              control={form.control}
+                              name={`week${week}Actual` as keyof PayrollFormValues}
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormControl>
+                                    <TimeInput
+                                      value={field.value as string}
+                                      onChange={field.onChange}
+                                      data-testid={`input-week${week}-actual`}
+                                    />
+                                  </FormControl>
+                                </FormItem>
+                              )}
+                            />
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -425,10 +633,76 @@ function PayrollFormDialog({
 
                 <Card>
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-sm font-medium">Adjustments</CardTitle>
+                    <CardTitle className="text-sm font-medium">Allowances</CardTitle>
+                    <CardDescription>Default and custom allowances</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
+                    {allowanceFields.map((field, index) => (
+                      <div key={field.id} className="flex items-end gap-3">
+                        <FormField
+                          control={form.control}
+                          name={`allowanceItems.${index}.label`}
+                          render={({ field }) => (
+                            <FormItem className="flex-1">
+                              {index === 0 && <FormLabel>Allowance Type</FormLabel>}
+                              <FormControl>
+                                <Input 
+                                  placeholder="Allowance name" 
+                                  {...field} 
+                                  data-testid={`input-allowance-label-${index}`}
+                                />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name={`allowanceItems.${index}.value`}
+                          render={({ field }) => (
+                            <FormItem className="w-32">
+                              {index === 0 && <FormLabel>Amount (PKR)</FormLabel>}
+                              <FormControl>
+                                <Input 
+                                  type="number"
+                                  placeholder="0" 
+                                  {...field} 
+                                  data-testid={`input-allowance-value-${index}`}
+                                />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeAllowance(index)}
+                          className="shrink-0"
+                          data-testid={`button-remove-allowance-${index}`}
+                        >
+                          <Trash2 className="h-4 w-4 text-muted-foreground" />
+                        </Button>
+                      </div>
+                    ))}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => appendAllowance({ label: "", value: "0" })}
+                      data-testid="button-add-allowance"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Allowance
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-medium">Other Adjustments</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-3 gap-4">
                       <FormField
                         control={form.control}
                         name="leaveEncashmentDays"
@@ -457,25 +731,6 @@ function PayrollFormDialog({
                                 type="number" 
                                 {...field} 
                                 data-testid="input-advance-deduction"
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <FormField
-                        control={form.control}
-                        name="allowances"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Allowances (PKR)</FormLabel>
-                            <FormControl>
-                              <Input 
-                                type="number" 
-                                {...field} 
-                                data-testid="input-allowances"
                               />
                             </FormControl>
                             <FormMessage />
@@ -543,6 +798,10 @@ function PayrollFormDialog({
                             <AccordionContent>
                               <div className="space-y-2 text-sm">
                                 <div className="flex justify-between">
+                                  <span className="text-muted-foreground">Working Days</span>
+                                  <span className="font-mono">{formValues.workingDaysInMonth} days</span>
+                                </div>
+                                <div className="flex justify-between">
                                   <span className="text-muted-foreground">Required Hours</span>
                                   <span className="font-mono">{calculation.requiredMonthlyHours.toFixed(1)}h</span>
                                 </div>
@@ -583,6 +842,22 @@ function PayrollFormDialog({
                               </div>
                             </AccordionContent>
                           </AccordionItem>
+                          <AccordionItem value="allowances">
+                            <AccordionTrigger className="text-sm py-2">Allowances Breakdown</AccordionTrigger>
+                            <AccordionContent>
+                              <div className="space-y-2 text-sm">
+                                {formValues.allowanceItems?.filter(a => parseFloat(a.value) > 0).map((item, idx) => (
+                                  <div key={idx} className="flex justify-between text-green-600">
+                                    <span className="truncate max-w-[150px]">{item.label}</span>
+                                    <span className="font-mono">+ {formatCurrency(parseFloat(item.value) || 0)}</span>
+                                  </div>
+                                ))}
+                                {(!formValues.allowanceItems || formValues.allowanceItems.every(a => parseFloat(a.value) <= 0)) && (
+                                  <div className="text-muted-foreground text-center py-2">No allowances added</div>
+                                )}
+                              </div>
+                            </AccordionContent>
+                          </AccordionItem>
                         </Accordion>
 
                         <Separator />
@@ -601,8 +876,8 @@ function PayrollFormDialog({
                             <span className="font-mono">- {formatCurrency(parseFloat(formValues.advanceDeduction || "0"))}</span>
                           </div>
                           <div className="flex justify-between text-green-600">
-                            <span>Allowances</span>
-                            <span className="font-mono">+ {formatCurrency(parseFloat(formValues.allowances || "0"))}</span>
+                            <span>Total Allowances</span>
+                            <span className="font-mono">+ {formatCurrency(calculation.totalAllowances)}</span>
                           </div>
                           <div className="flex justify-between text-green-600">
                             <span>Bonuses</span>
@@ -703,6 +978,14 @@ function PayrollDetailDialog({
     "July", "August", "September", "October", "November", "December"
   ];
 
+  // Parse allowance details
+  let allowanceItems: AllowanceItem[] = [];
+  try {
+    allowanceItems = JSON.parse(record.allowanceDetails || "[]");
+  } catch {
+    allowanceItems = [];
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -741,6 +1024,10 @@ function PayrollDetailDialog({
               </CardHeader>
               <CardContent className="space-y-2 text-sm">
                 <div className="flex justify-between">
+                  <span className="text-muted-foreground">Working Days</span>
+                  <span className="font-mono">{record.workingDaysInMonth} days</span>
+                </div>
+                <div className="flex justify-between">
                   <span className="text-muted-foreground">Required</span>
                   <span className="font-mono">{record.requiredMonthlyHours}h</span>
                 </div>
@@ -775,6 +1062,22 @@ function PayrollDetailDialog({
             </Card>
           </div>
 
+          {allowanceItems.length > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">Allowances</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                {allowanceItems.map((item, idx) => (
+                  <div key={idx} className="flex justify-between">
+                    <span className="text-muted-foreground">{item.label}</span>
+                    <span className="font-mono text-green-600">+ {formatCurrency(item.value)}</span>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium">Salary Breakdown</CardTitle>
@@ -793,7 +1096,7 @@ function PayrollDetailDialog({
                 <span className="font-mono">- {formatCurrency(record.advanceDeduction || "0")}</span>
               </div>
               <div className="flex justify-between text-green-600">
-                <span>Allowances</span>
+                <span>Total Allowances</span>
                 <span className="font-mono">+ {formatCurrency(record.allowances || "0")}</span>
               </div>
               <div className="flex justify-between text-green-600">
@@ -943,6 +1246,7 @@ export default function Payroll() {
                   <TableRow>
                     <TableHead>Employee</TableHead>
                     <TableHead>Period</TableHead>
+                    <TableHead>Working Days</TableHead>
                     <TableHead>Hours Worked</TableHead>
                     <TableHead>Gross Salary</TableHead>
                     <TableHead>Net Salary</TableHead>
@@ -965,6 +1269,9 @@ export default function Payroll() {
                       </TableCell>
                       <TableCell>
                         {months[record.month - 1]} {record.year}
+                      </TableCell>
+                      <TableCell className="font-mono">
+                        {record.workingDaysInMonth} days
                       </TableCell>
                       <TableCell className="font-mono">
                         {record.totalHoursWorked}h / {record.requiredMonthlyHours}h
