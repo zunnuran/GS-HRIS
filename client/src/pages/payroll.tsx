@@ -589,11 +589,10 @@ function PayrollFormDialog({
     }
   }, [formValues.month, formValues.year, form]);
 
-  // Update expected hours when employee or working days change
+  // Update expected hours when employee or working days change (only for new records, not when editing)
   useEffect(() => {
-    if (selectedEmployee) {
+    if (selectedEmployee && !editRecord) {
       const hoursPerDay = parseFloat(selectedEmployee.requiredHoursPerDay) || 8;
-      const totalExpected = parseInt(formValues.workingDaysInMonth) * hoursPerDay;
       
       // Distribute across weeks (6 days each for first 4 weeks, remainder for week 5)
       const weekHours = hoursPerDay * 6;
@@ -605,7 +604,7 @@ function PayrollFormDialog({
       const remainingDays = parseInt(formValues.workingDaysInMonth) - 24;
       form.setValue("week5Expected", decimalToTime(Math.max(0, remainingDays * hoursPerDay)));
     }
-  }, [selectedEmployee, formValues.workingDaysInMonth, form]);
+  }, [selectedEmployee, formValues.workingDaysInMonth, form, editRecord]);
 
   const buildPayload = (data: PayrollFormValues) => {
     const calc = calculatePayroll(selectedEmployee, data);
