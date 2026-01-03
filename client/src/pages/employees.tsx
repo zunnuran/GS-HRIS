@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -100,20 +100,55 @@ function EmployeeFormDialog({
   const form = useForm<EmployeeFormValues>({
     resolver: zodResolver(employeeFormSchema),
     defaultValues: {
-      firstName: employee?.firstName ?? "",
-      lastName: employee?.lastName ?? "",
-      email: employee?.email ?? "",
-      phone: employee?.phone ?? "",
-      departmentId: employee?.departmentId?.toString() ?? "",
-      position: employee?.position ?? "",
-      grossSalary: employee?.grossSalary ?? "",
-      requiredHoursPerDay: employee?.requiredHoursPerDay ?? "8",
-      workingDaysPerMonth: employee?.workingDaysPerMonth?.toString() ?? "26",
-      overtimeMultiplier: employee?.overtimeMultiplier ?? "1.0",
-      hireDate: employee?.hireDate ?? "",
-      status: employee?.status ?? "active",
+      firstName: "",
+      lastName: "",
+      email: "",
+      phone: "",
+      departmentId: "",
+      position: "",
+      grossSalary: "",
+      requiredHoursPerDay: "8",
+      workingDaysPerMonth: "26",
+      overtimeMultiplier: "1.0",
+      hireDate: "",
+      status: "active",
     },
   });
+
+  // Reset form when employee changes (for edit mode) or dialog opens (for create mode)
+  useEffect(() => {
+    if (employee) {
+      form.reset({
+        firstName: employee.firstName ?? "",
+        lastName: employee.lastName ?? "",
+        email: employee.email ?? "",
+        phone: employee.phone ?? "",
+        departmentId: employee.departmentId?.toString() ?? "",
+        position: employee.position ?? "",
+        grossSalary: employee.grossSalary ?? "",
+        requiredHoursPerDay: employee.requiredHoursPerDay ?? "8",
+        workingDaysPerMonth: employee.workingDaysPerMonth?.toString() ?? "26",
+        overtimeMultiplier: employee.overtimeMultiplier ?? "1.0",
+        hireDate: employee.hireDate ?? "",
+        status: employee.status ?? "active",
+      });
+    } else if (open) {
+      form.reset({
+        firstName: "",
+        lastName: "",
+        email: "",
+        phone: "",
+        departmentId: "",
+        position: "",
+        grossSalary: "",
+        requiredHoursPerDay: "8",
+        workingDaysPerMonth: "26",
+        overtimeMultiplier: "1.0",
+        hireDate: "",
+        status: "active",
+      });
+    }
+  }, [employee, open, form]);
 
   const createMutation = useMutation({
     mutationFn: async (data: EmployeeFormValues) => {
