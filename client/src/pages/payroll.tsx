@@ -56,7 +56,8 @@ import {
   Trash2,
   Calendar,
   ChevronUp,
-  ChevronDown
+  ChevronDown,
+  Pencil
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -424,22 +425,62 @@ function PayrollFormDialog({
   open,
   onOpenChange,
   employees,
+  editRecord,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   employees: Employee[];
+  editRecord?: PayrollRecordWithEmployee | null;
 }) {
   const { toast } = useToast();
   const currentDate = new Date();
   const currentMonth = (currentDate.getMonth() + 1).toString();
   const currentYear = currentDate.getFullYear().toString();
+  const isEditMode = !!editRecord;
 
   // Calculate default working days for current month
   const defaultWorkingDays = calculateWorkingDays(parseInt(currentMonth), parseInt(currentYear));
 
+  // Parse allowance details from editRecord if present
+  const parseAllowanceDetails = (record: PayrollRecordWithEmployee | null | undefined) => {
+    if (!record?.allowanceDetails) return DEFAULT_ALLOWANCES.map(a => ({ label: a.label, value: "0" }));
+    try {
+      const parsed = JSON.parse(record.allowanceDetails);
+      return Array.isArray(parsed) ? parsed.map((a: { label: string; value: number }) => ({ 
+        label: a.label, 
+        value: a.value.toString() 
+      })) : DEFAULT_ALLOWANCES.map(a => ({ label: a.label, value: "0" }));
+    } catch {
+      return DEFAULT_ALLOWANCES.map(a => ({ label: a.label, value: "0" }));
+    }
+  };
+
   const form = useForm<PayrollFormValues>({
     resolver: zodResolver(payrollFormSchema),
-    defaultValues: {
+    defaultValues: editRecord ? {
+      employeeId: editRecord.employeeId.toString(),
+      month: editRecord.month.toString(),
+      year: editRecord.year.toString(),
+      workingDaysInMonth: editRecord.workingDaysInMonth?.toString() || "26",
+      week1Expected: normalizeTimeValue(editRecord.week1Expected),
+      week1Actual: normalizeTimeValue(editRecord.week1Actual),
+      week2Expected: normalizeTimeValue(editRecord.week2Expected),
+      week2Actual: normalizeTimeValue(editRecord.week2Actual),
+      week3Expected: normalizeTimeValue(editRecord.week3Expected),
+      week3Actual: normalizeTimeValue(editRecord.week3Actual),
+      week4Expected: normalizeTimeValue(editRecord.week4Expected),
+      week4Actual: normalizeTimeValue(editRecord.week4Actual),
+      week5Expected: normalizeTimeValue(editRecord.week5Expected),
+      week5Actual: normalizeTimeValue(editRecord.week5Actual),
+      paidLeaves: editRecord.paidLeaves?.toString() || "0",
+      enableOvertime: editRecord.enableOvertime || false,
+      leaveEncashmentDays: editRecord.leaveEncashmentDays?.toString() || "0",
+      advanceDeduction: editRecord.advanceDeduction?.toString() || "0",
+      allowanceItems: parseAllowanceDetails(editRecord),
+      bonuses: editRecord.bonuses?.toString() || "0",
+      remarks: editRecord.remarks || "",
+      status: editRecord.status || "draft",
+    } : {
       employeeId: "",
       month: currentMonth,
       year: currentYear,
@@ -454,7 +495,7 @@ function PayrollFormDialog({
       week4Actual: "00:00",
       week5Expected: "24:00",
       week5Actual: "00:00",
-      paidLeaveHours: "00:00",
+      paidLeaves: "0",
       enableOvertime: false,
       leaveEncashmentDays: "0",
       advanceDeduction: "0",
@@ -464,6 +505,64 @@ function PayrollFormDialog({
       status: "draft",
     },
   });
+
+  // Reset form when editRecord changes (handles both edit mode and create mode)
+  useEffect(() => {
+    if (editRecord) {
+      // Edit mode: populate with existing record
+      form.reset({
+        employeeId: editRecord.employeeId.toString(),
+        month: editRecord.month.toString(),
+        year: editRecord.year.toString(),
+        workingDaysInMonth: editRecord.workingDaysInMonth?.toString() || "26",
+        week1Expected: normalizeTimeValue(editRecord.week1Expected),
+        week1Actual: normalizeTimeValue(editRecord.week1Actual),
+        week2Expected: normalizeTimeValue(editRecord.week2Expected),
+        week2Actual: normalizeTimeValue(editRecord.week2Actual),
+        week3Expected: normalizeTimeValue(editRecord.week3Expected),
+        week3Actual: normalizeTimeValue(editRecord.week3Actual),
+        week4Expected: normalizeTimeValue(editRecord.week4Expected),
+        week4Actual: normalizeTimeValue(editRecord.week4Actual),
+        week5Expected: normalizeTimeValue(editRecord.week5Expected),
+        week5Actual: normalizeTimeValue(editRecord.week5Actual),
+        paidLeaves: editRecord.paidLeaves?.toString() || "0",
+        enableOvertime: editRecord.enableOvertime || false,
+        leaveEncashmentDays: editRecord.leaveEncashmentDays?.toString() || "0",
+        advanceDeduction: editRecord.advanceDeduction?.toString() || "0",
+        allowanceItems: parseAllowanceDetails(editRecord),
+        bonuses: editRecord.bonuses?.toString() || "0",
+        remarks: editRecord.remarks || "",
+        status: editRecord.status || "draft",
+      });
+    } else if (open) {
+      // Create mode: reset to fresh defaults when dialog opens for new record
+      const freshWorkingDays = calculateWorkingDays(parseInt(currentMonth), parseInt(currentYear));
+      form.reset({
+        employeeId: "",
+        month: currentMonth,
+        year: currentYear,
+        workingDaysInMonth: freshWorkingDays.toString(),
+        week1Expected: "48:00",
+        week1Actual: "00:00",
+        week2Expected: "48:00",
+        week2Actual: "00:00",
+        week3Expected: "48:00",
+        week3Actual: "00:00",
+        week4Expected: "40:00",
+        week4Actual: "00:00",
+        week5Expected: "24:00",
+        week5Actual: "00:00",
+        paidLeaves: "0",
+        enableOvertime: false,
+        leaveEncashmentDays: "0",
+        advanceDeduction: "0",
+        allowanceItems: DEFAULT_ALLOWANCES.map(a => ({ label: a.label, value: "0" })),
+        bonuses: "0",
+        remarks: "",
+        status: "draft",
+      });
+    }
+  }, [editRecord, open, form, currentMonth, currentYear]);
 
   const { fields: allowanceFields, append: appendAllowance, remove: removeAllowance } = useFieldArray({
     control: form.control,
@@ -508,54 +607,61 @@ function PayrollFormDialog({
     }
   }, [selectedEmployee, formValues.workingDaysInMonth, form]);
 
+  const buildPayload = (data: PayrollFormValues) => {
+    const calc = calculatePayroll(selectedEmployee, data);
+    
+    // Convert allowance items to JSON string
+    const allowanceDetails = JSON.stringify(
+      data.allowanceItems?.map(item => ({
+        label: item.label,
+        value: parseFloat(item.value) || 0
+      })) || []
+    );
+    
+    return {
+      employeeId: parseInt(data.employeeId),
+      month: parseInt(data.month),
+      year: parseInt(data.year),
+      workingDaysInMonth: parseInt(data.workingDaysInMonth),
+      week1Expected: data.week1Expected,
+      week1Actual: data.week1Actual,
+      week2Expected: data.week2Expected,
+      week2Actual: data.week2Actual,
+      week3Expected: data.week3Expected,
+      week3Actual: data.week3Actual,
+      week4Expected: data.week4Expected,
+      week4Actual: data.week4Actual,
+      week5Expected: data.week5Expected,
+      week5Actual: data.week5Actual,
+      paidLeaves: parseFloat(data.paidLeaves || "0").toFixed(2),
+      enableOvertime: data.enableOvertime,
+      overtimeHours: calc.overtimeHours.toFixed(2),
+      overtimePay: calc.overtimePay.toFixed(2),
+      totalHoursWorked: calc.totalHoursWorked.toFixed(2),
+      requiredMonthlyHours: calc.requiredMonthlyHours.toFixed(2),
+      hoursDifference: calc.hoursDifference.toFixed(2),
+      leaveEncashmentDays: parseInt(data.leaveEncashmentDays || "0"),
+      adjustedHoursDifference: calc.adjustedHoursDifference.toFixed(2),
+      perHourRate: calc.perHourRate.toFixed(2),
+      perDayRate: calc.perDayRate.toFixed(2),
+      hoursDeduction: calc.hoursDeduction.toFixed(2),
+      advanceDeduction: data.advanceDeduction || "0",
+      allowanceDetails: allowanceDetails,
+      allowances: calc.totalAllowances.toFixed(2),
+      bonuses: data.bonuses || "0",
+      grossSalary: calc.grossSalary.toFixed(2),
+      netSalary: calc.netSalary.toFixed(2),
+      remarks: data.remarks || null,
+      status: data.status,
+    };
+  };
+
   const createMutation = useMutation({
     mutationFn: async (data: PayrollFormValues) => {
-      const calc = calculatePayroll(selectedEmployee, data);
-      
-      // Convert allowance items to JSON string
-      const allowanceDetails = JSON.stringify(
-        data.allowanceItems?.map(item => ({
-          label: item.label,
-          value: parseFloat(item.value) || 0
-        })) || []
-      );
-      
-      const payload = {
-        employeeId: parseInt(data.employeeId),
-        month: parseInt(data.month),
-        year: parseInt(data.year),
-        workingDaysInMonth: parseInt(data.workingDaysInMonth),
-        week1Expected: data.week1Expected,
-        week1Actual: data.week1Actual,
-        week2Expected: data.week2Expected,
-        week2Actual: data.week2Actual,
-        week3Expected: data.week3Expected,
-        week3Actual: data.week3Actual,
-        week4Expected: data.week4Expected,
-        week4Actual: data.week4Actual,
-        week5Expected: data.week5Expected,
-        week5Actual: data.week5Actual,
-        paidLeaveHours: data.paidLeaveHours,
-        enableOvertime: data.enableOvertime,
-        overtimeHours: calc.overtimeHours.toFixed(2),
-        overtimePay: calc.overtimePay.toFixed(2),
-        totalHoursWorked: calc.totalHoursWorked.toFixed(2),
-        requiredMonthlyHours: calc.requiredMonthlyHours.toFixed(2),
-        hoursDifference: calc.hoursDifference.toFixed(2),
-        leaveEncashmentDays: parseInt(data.leaveEncashmentDays || "0"),
-        adjustedHoursDifference: calc.adjustedHoursDifference.toFixed(2),
-        perHourRate: calc.perHourRate.toFixed(2),
-        perDayRate: calc.perDayRate.toFixed(2),
-        hoursDeduction: calc.hoursDeduction.toFixed(2),
-        advanceDeduction: data.advanceDeduction || "0",
-        allowanceDetails: allowanceDetails,
-        allowances: calc.totalAllowances.toFixed(2),
-        bonuses: data.bonuses || "0",
-        grossSalary: calc.grossSalary.toFixed(2),
-        netSalary: calc.netSalary.toFixed(2),
-        remarks: data.remarks || null,
-        status: data.status,
-      };
+      if (!selectedEmployee) {
+        throw new Error("Employee not selected");
+      }
+      const payload = buildPayload(data);
       return apiRequest("POST", "/api/payroll", payload);
     },
     onSuccess: () => {
@@ -570,8 +676,35 @@ function PayrollFormDialog({
     },
   });
 
+  const updateMutation = useMutation({
+    mutationFn: async (data: PayrollFormValues) => {
+      if (!editRecord?.id) {
+        throw new Error("No payroll record to update");
+      }
+      if (!selectedEmployee) {
+        throw new Error("Employee not selected");
+      }
+      const payload = buildPayload(data);
+      return apiRequest("PUT", `/api/payroll/${editRecord.id}`, payload);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      toast({ title: "Payroll record updated successfully" });
+      onOpenChange(false);
+      form.reset();
+    },
+    onError: () => {
+      toast({ title: "Failed to update payroll record", variant: "destructive" });
+    },
+  });
+
   const onSubmit = (data: PayrollFormValues) => {
-    createMutation.mutate(data);
+    if (isEditMode) {
+      updateMutation.mutate(data);
+    } else {
+      createMutation.mutate(data);
+    }
   };
 
   const formatCurrency = (value: number) => {
@@ -591,7 +724,7 @@ function PayrollFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-6xl max-h-[95vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Create Payroll Record</DialogTitle>
+          <DialogTitle>{isEditMode ? "Edit Payroll Record" : "Create Payroll Record"}</DialogTitle>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)}>
@@ -1178,10 +1311,12 @@ function PayrollFormDialog({
               </Button>
               <Button 
                 type="submit" 
-                disabled={createMutation.isPending || !selectedEmployee}
+                disabled={createMutation.isPending || updateMutation.isPending || !selectedEmployee}
                 data-testid="button-submit-payroll"
               >
-                {createMutation.isPending ? "Creating..." : "Create Payroll Record"}
+                {createMutation.isPending || updateMutation.isPending
+                  ? (isEditMode ? "Saving..." : "Creating...")
+                  : (isEditMode ? "Save Changes" : "Create Payroll Record")}
               </Button>
             </div>
           </form>
@@ -1369,6 +1504,7 @@ function PayrollDetailDialog({
 
 export default function Payroll() {
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editRecord, setEditRecord] = useState<PayrollRecordWithEmployee | null>(null);
   const [detailRecord, setDetailRecord] = useState<PayrollRecordWithEmployee | null>(null);
   const [monthFilter, setMonthFilter] = useState<string>("all");
   const [yearFilter, setYearFilter] = useState<string>(new Date().getFullYear().toString());
@@ -1522,14 +1658,27 @@ export default function Payroll() {
                       </TableCell>
                       <TableCell>{getStatusBadge(record.status)}</TableCell>
                       <TableCell>
-                        <Button 
-                          variant="ghost" 
-                          size="icon"
-                          onClick={() => setDetailRecord(record)}
-                          data-testid={`button-view-${record.id}`}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
+                        <div className="flex gap-1">
+                          <Button 
+                            variant="ghost" 
+                            size="icon"
+                            onClick={() => setDetailRecord(record)}
+                            data-testid={`button-view-${record.id}`}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="icon"
+                            onClick={() => {
+                              setEditRecord(record);
+                              setDialogOpen(true);
+                            }}
+                            data-testid={`button-edit-${record.id}`}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -1554,8 +1703,12 @@ export default function Payroll() {
 
       <PayrollFormDialog
         open={dialogOpen}
-        onOpenChange={setDialogOpen}
+        onOpenChange={(open) => {
+          setDialogOpen(open);
+          if (!open) setEditRecord(null);
+        }}
         employees={employees}
+        editRecord={editRecord}
       />
 
       <PayrollDetailDialog
