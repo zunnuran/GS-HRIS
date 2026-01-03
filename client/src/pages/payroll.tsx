@@ -248,15 +248,20 @@ function calculatePayroll(
   const paidLeaveHours = paidLeaves * requiredHoursPerDay;
   const effectiveHoursWorked = totalHoursWorked + paidLeaveHours;
 
-  // Calculate required hours from sum of expected hours (already computed above)
-  const requiredMonthlyHours = week1Expected + week2Expected + week3Expected + week4Expected + week5Expected;
+  // Calculate required hours from working days × hours per day (not from weekly expected totals)
+  // This ensures per-hour rate updates when working days are changed
+  const requiredMonthlyHours = workingDaysInMonth * requiredHoursPerDay;
+  
+  // For hour difference calculation, use sum of weekly expected hours (what was actually scheduled)
+  const scheduledHours = week1Expected + week2Expected + week3Expected + week4Expected + week5Expected;
 
-  const hoursDifference = requiredMonthlyHours - effectiveHoursWorked;
+  const hoursDifference = scheduledHours - effectiveHoursWorked;
 
   const leaveEncashmentDays = parseInt(formValues.leaveEncashmentDays || "0");
   const leaveEncashmentHours = leaveEncashmentDays * requiredHoursPerDay;
   const adjustedHoursDifference = hoursDifference - leaveEncashmentHours;
 
+  // Per-hour rate based on working days formula: totalSalary / (workingDays × hoursPerDay)
   const perHourRate = requiredMonthlyHours > 0 ? grossSalary / requiredMonthlyHours : 0;
   const perDayRate = workingDaysInMonth > 0 ? grossSalary / workingDaysInMonth : 0;
 
@@ -265,11 +270,11 @@ function calculatePayroll(
     ? adjustedHoursDifference * perHourRate * overtimeMultiplier
     : 0;
 
-  // Overtime calculation (when enabled and worked more than required)
+  // Overtime calculation (when enabled and worked more than scheduled hours)
   let overtimeHours = 0;
   let overtimePay = 0;
-  if (formValues.enableOvertime && effectiveHoursWorked > requiredMonthlyHours) {
-    overtimeHours = effectiveHoursWorked - requiredMonthlyHours;
+  if (formValues.enableOvertime && effectiveHoursWorked > scheduledHours) {
+    overtimeHours = effectiveHoursWorked - scheduledHours;
     overtimePay = overtimeHours * perHourRate * overtimeMultiplier;
   }
 
