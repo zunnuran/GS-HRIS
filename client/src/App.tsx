@@ -17,6 +17,11 @@ import Payroll from "@/pages/payroll";
 import Departments from "@/pages/departments";
 import Settings from "@/pages/settings";
 import Login from "@/pages/login";
+import Assets from "@/pages/assets";
+import AssetCategories from "@/pages/asset-categories";
+import AssetAssignments from "@/pages/asset-assignments";
+import Manufacturers from "@/pages/manufacturers";
+import Locations from "@/pages/locations";
 import type { User } from "@shared/schema";
 
 function AppLayout({ children }: { children: React.ReactNode }) {
@@ -114,6 +119,21 @@ function Router() {
       </Route>
       <Route path="/settings">
         <ProtectedRoute component={Settings} />
+      </Route>
+      <Route path="/assets">
+        <ProtectedRoute component={Assets} />
+      </Route>
+      <Route path="/asset-categories">
+        <ProtectedRoute component={AssetCategories} />
+      </Route>
+      <Route path="/asset-assignments">
+        <ProtectedRoute component={AssetAssignments} />
+      </Route>
+      <Route path="/manufacturers">
+        <ProtectedRoute component={Manufacturers} />
+      </Route>
+      <Route path="/locations">
+        <ProtectedRoute component={Locations} />
       </Route>
       <Route component={NotFound} />
     </Switch>

@@ -197,3 +197,193 @@ export type EmployeeWithDepartment = Employee & {
 export type PayrollRecordWithEmployee = PayrollRecord & {
   employee: Employee;
 };
+
+// ==================== ASSET MANAGEMENT ====================
+
+export const manufacturers = pgTable("manufacturers", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  name: text("name").notNull().unique(),
+  description: text("description"),
+  website: text("website"),
+  contactEmail: text("contact_email"),
+  contactPhone: text("contact_phone"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertManufacturerSchema = createInsertSchema(manufacturers).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertManufacturer = z.infer<typeof insertManufacturerSchema>;
+export type Manufacturer = typeof manufacturers.$inferSelect;
+
+export const locations = pgTable("locations", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  name: text("name").notNull().unique(),
+  description: text("description"),
+  address: text("address"),
+  building: text("building"),
+  floor: text("floor"),
+  room: text("room"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertLocationSchema = createInsertSchema(locations).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertLocation = z.infer<typeof insertLocationSchema>;
+export type Location = typeof locations.$inferSelect;
+
+export const assetCategories = pgTable("asset_categories", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  name: text("name").notNull().unique(),
+  description: text("description"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertAssetCategorySchema = createInsertSchema(assetCategories).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertAssetCategory = z.infer<typeof insertAssetCategorySchema>;
+export type AssetCategory = typeof assetCategories.$inferSelect;
+
+export const assetSubCategories = pgTable("asset_sub_categories", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  name: text("name").notNull(),
+  description: text("description"),
+  categoryId: integer("category_id").references(() => assetCategories.id).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertAssetSubCategorySchema = createInsertSchema(assetSubCategories).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertAssetSubCategory = z.infer<typeof insertAssetSubCategorySchema>;
+export type AssetSubCategory = typeof assetSubCategories.$inferSelect;
+
+export const assetCodeSequence = pgTable("asset_code_sequence", {
+  id: integer("id").primaryKey().default(1),
+  lastNumber: integer("last_number").notNull().default(0),
+});
+
+export const assets = pgTable("assets", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  code: text("code").notNull().unique(),
+  name: text("name").notNull(),
+  description: text("description"),
+  categoryId: integer("category_id").references(() => assetCategories.id),
+  subCategoryId: integer("sub_category_id").references(() => assetSubCategories.id),
+  manufacturerId: integer("manufacturer_id").references(() => manufacturers.id),
+  locationId: integer("location_id").references(() => locations.id),
+  status: text("status").notNull().default("working"),
+  estimatedCost: decimal("estimated_cost", { precision: 12, scale: 2 }),
+  purchaseDate: date("purchase_date"),
+  manufacturer: text("manufacturer_name"),
+  serialNumber: text("serial_number"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertAssetSchema = createInsertSchema(assets).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  code: z.string().optional(),
+});
+
+export type InsertAsset = z.infer<typeof insertAssetSchema>;
+export type Asset = typeof assets.$inferSelect;
+
+export const assetAssignments = pgTable("asset_assignments", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  assetId: integer("asset_id").references(() => assets.id).notNull(),
+  employeeId: integer("employee_id").references(() => employees.id).notNull(),
+  assignmentDate: date("assignment_date").notNull(),
+  recoveryDate: date("recovery_date"),
+  estimatedCost: decimal("estimated_cost", { precision: 12, scale: 2 }),
+  assetStatus: text("asset_status").notNull().default("working"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertAssetAssignmentSchema = createInsertSchema(assetAssignments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertAssetAssignment = z.infer<typeof insertAssetAssignmentSchema>;
+export type AssetAssignment = typeof assetAssignments.$inferSelect;
+
+export const assetCategoriesRelations = relations(assetCategories, ({ many }) => ({
+  subCategories: many(assetSubCategories),
+  assets: many(assets),
+}));
+
+export const assetSubCategoriesRelations = relations(assetSubCategories, ({ one }) => ({
+  category: one(assetCategories, {
+    fields: [assetSubCategories.categoryId],
+    references: [assetCategories.id],
+  }),
+}));
+
+export const assetsRelations = relations(assets, ({ one, many }) => ({
+  category: one(assetCategories, {
+    fields: [assets.categoryId],
+    references: [assetCategories.id],
+  }),
+  subCategory: one(assetSubCategories, {
+    fields: [assets.subCategoryId],
+    references: [assetSubCategories.id],
+  }),
+  manufacturerRef: one(manufacturers, {
+    fields: [assets.manufacturerId],
+    references: [manufacturers.id],
+  }),
+  location: one(locations, {
+    fields: [assets.locationId],
+    references: [locations.id],
+  }),
+  assignments: many(assetAssignments),
+}));
+
+export const assetAssignmentsRelations = relations(assetAssignments, ({ one }) => ({
+  asset: one(assets, {
+    fields: [assetAssignments.assetId],
+    references: [assets.id],
+  }),
+  employee: one(employees, {
+    fields: [assetAssignments.employeeId],
+    references: [employees.id],
+  }),
+}));
+
+export type AssetWithRelations = Asset & {
+  category?: AssetCategory | null;
+  subCategory?: AssetSubCategory | null;
+  manufacturerRef?: Manufacturer | null;
+  location?: Location | null;
+};
+
+export type AssetAssignmentWithDetails = AssetAssignment & {
+  asset?: Asset | null;
+  employee?: Employee | null;
+};

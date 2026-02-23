@@ -7,7 +7,11 @@ import {
   TrendingUp,
   Building2,
   Clock,
-  DollarSign
+  DollarSign,
+  Package,
+  FolderTree,
+  ClipboardList,
+  CheckCircle,
 } from "lucide-react";
 import { 
   BarChart, 
@@ -29,6 +33,18 @@ interface DashboardStats {
   pendingPayroll: number;
   thisMonthPayroll: number;
   lastMonthPayroll: number;
+}
+
+interface AssetDashboardStats {
+  totalAssets: number;
+  totalCategories: number;
+  totalAssignees: number;
+  activeAssignments: number;
+  statusCounts: {
+    working: number;
+    malfunctioning: number;
+    damaged: number;
+  };
 }
 
 interface RecentActivity {
@@ -119,6 +135,10 @@ export default function Dashboard() {
     queryKey: ["/api/dashboard/payroll-history"],
   });
 
+  const { data: assetStats, isLoading: assetStatsLoading } = useQuery<AssetDashboardStats>({
+    queryKey: ["/api/dashboard/asset-stats"],
+  });
+
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -169,6 +189,41 @@ export default function Dashboard() {
             value: Math.round(((stats.thisMonthPayroll - stats.lastMonthPayroll) / stats.lastMonthPayroll) * 100),
             positive: stats.thisMonthPayroll >= stats.lastMonthPayroll
           } : undefined}
+        />
+      </div>
+
+      <div className="flex flex-col gap-1 mt-2">
+        <h2 className="text-lg font-semibold" data-testid="text-asset-stats-title">Asset Management</h2>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          title="Total Assets"
+          value={assetStats?.totalAssets ?? 0}
+          subtitle={`${assetStats?.statusCounts?.working ?? 0} working`}
+          icon={Package}
+          loading={assetStatsLoading}
+        />
+        <StatCard
+          title="Asset Categories"
+          value={assetStats?.totalCategories ?? 0}
+          subtitle="Asset types"
+          icon={FolderTree}
+          loading={assetStatsLoading}
+        />
+        <StatCard
+          title="Active Assignments"
+          value={assetStats?.activeAssignments ?? 0}
+          subtitle={`${assetStats?.totalAssignees ?? 0} employees`}
+          icon={ClipboardList}
+          loading={assetStatsLoading}
+        />
+        <StatCard
+          title="Asset Health"
+          value={`${assetStats?.statusCounts?.working ?? 0}/${assetStats?.totalAssets ?? 0}`}
+          subtitle={`${assetStats?.statusCounts?.malfunctioning ?? 0} malfunctioning, ${assetStats?.statusCounts?.damaged ?? 0} damaged`}
+          icon={CheckCircle}
+          loading={assetStatsLoading}
         />
       </div>
 

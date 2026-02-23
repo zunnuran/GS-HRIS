@@ -18,7 +18,12 @@ import {
   Building2,
   Settings,
   LogOut,
-  Gamepad2
+  Gamepad2,
+  Package,
+  FolderTree,
+  ClipboardList,
+  Factory,
+  MapPin,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -43,6 +48,34 @@ const mainMenuItems = [
     title: "Departments",
     url: "/departments",
     icon: Building2,
+  },
+];
+
+const assetMenuItems = [
+  {
+    title: "Assets",
+    url: "/assets",
+    icon: Package,
+  },
+  {
+    title: "Categories",
+    url: "/asset-categories",
+    icon: FolderTree,
+  },
+  {
+    title: "Assignments",
+    url: "/asset-assignments",
+    icon: ClipboardList,
+  },
+  {
+    title: "Manufacturers",
+    url: "/manufacturers",
+    icon: Factory,
+  },
+  {
+    title: "Locations",
+    url: "/locations",
+    icon: MapPin,
   },
 ];
 
@@ -83,6 +116,27 @@ export function AppSidebar() {
                     isActive={location === item.url}
                   >
                     <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase()}`}>
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Asset Management</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {assetMenuItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton 
+                    asChild 
+                    isActive={location === item.url}
+                  >
+                    <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase().replace(/\s+/g, '-')}`}>
                       <item.icon className="h-4 w-4" />
                       <span>{item.title}</span>
                     </Link>

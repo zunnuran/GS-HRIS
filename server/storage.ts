@@ -3,6 +3,13 @@ import {
   departments,
   employees,
   payrollRecords,
+  manufacturers,
+  locations,
+  assetCategories,
+  assetSubCategories,
+  assets,
+  assetAssignments,
+  assetCodeSequence,
   type User,
   type InsertUser,
   type Department,
@@ -13,9 +20,23 @@ import {
   type PayrollRecord,
   type InsertPayrollRecord,
   type PayrollRecordWithEmployee,
+  type Manufacturer,
+  type InsertManufacturer,
+  type Location,
+  type InsertLocation,
+  type AssetCategory,
+  type InsertAssetCategory,
+  type AssetSubCategory,
+  type InsertAssetSubCategory,
+  type Asset,
+  type InsertAsset,
+  type AssetAssignment,
+  type InsertAssetAssignment,
+  type AssetWithRelations,
+  type AssetAssignmentWithDetails,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, sql, and } from "drizzle-orm";
+import { eq, desc, sql, and, isNull, isNotNull } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 
 export interface IStorage {
@@ -60,6 +81,62 @@ export interface IStorage {
 
   // Seed default data
   seedDefaultData(): Promise<void>;
+
+  // Manufacturer operations
+  getManufacturers(): Promise<(Manufacturer & { assetCount: number })[]>;
+  getManufacturer(id: number): Promise<Manufacturer | undefined>;
+  createManufacturer(m: InsertManufacturer): Promise<Manufacturer>;
+  updateManufacturer(id: number, m: Partial<InsertManufacturer>): Promise<Manufacturer | undefined>;
+  deleteManufacturer(id: number): Promise<boolean>;
+
+  // Location operations
+  getLocations(): Promise<(Location & { assetCount: number })[]>;
+  getLocation(id: number): Promise<Location | undefined>;
+  createLocation(l: InsertLocation): Promise<Location>;
+  updateLocation(id: number, l: Partial<InsertLocation>): Promise<Location | undefined>;
+  deleteLocation(id: number): Promise<boolean>;
+
+  // Asset Category operations
+  getAssetCategories(): Promise<(AssetCategory & { assetCount: number })[]>;
+  getAssetCategory(id: number): Promise<AssetCategory | undefined>;
+  createAssetCategory(c: InsertAssetCategory): Promise<AssetCategory>;
+  updateAssetCategory(id: number, c: Partial<InsertAssetCategory>): Promise<AssetCategory | undefined>;
+  deleteAssetCategory(id: number): Promise<boolean>;
+
+  // Asset SubCategory operations
+  getAssetSubCategories(): Promise<(AssetSubCategory & { category?: AssetCategory | null; assetCount: number })[]>;
+  getAssetSubCategoriesByCategory(categoryId: number): Promise<AssetSubCategory[]>;
+  getAssetSubCategory(id: number): Promise<AssetSubCategory | undefined>;
+  createAssetSubCategory(sc: InsertAssetSubCategory): Promise<AssetSubCategory>;
+  updateAssetSubCategory(id: number, sc: Partial<InsertAssetSubCategory>): Promise<AssetSubCategory | undefined>;
+  deleteAssetSubCategory(id: number): Promise<boolean>;
+
+  // Asset operations
+  getAssets(): Promise<AssetWithRelations[]>;
+  getRecentAssets(limit: number): Promise<Asset[]>;
+  getAsset(id: number): Promise<Asset | undefined>;
+  generateAssetCode(): Promise<string>;
+  createAsset(a: InsertAsset): Promise<Asset>;
+  updateAsset(id: number, a: Partial<InsertAsset>): Promise<Asset | undefined>;
+  deleteAsset(id: number): Promise<boolean>;
+
+  // Asset Assignment operations
+  getAssetAssignments(): Promise<AssetAssignmentWithDetails[]>;
+  getRecentAssetAssignments(limit: number): Promise<AssetAssignmentWithDetails[]>;
+  getAssetAssignment(id: number): Promise<AssetAssignment | undefined>;
+  getAssetAssignmentsByAsset(assetId: number): Promise<AssetAssignmentWithDetails[]>;
+  createAssetAssignment(a: InsertAssetAssignment): Promise<AssetAssignment>;
+  updateAssetAssignment(id: number, a: Partial<InsertAssetAssignment>): Promise<AssetAssignment | undefined>;
+  deleteAssetAssignment(id: number): Promise<boolean>;
+
+  // Asset Dashboard stats
+  getAssetDashboardStats(): Promise<{
+    totalAssets: number;
+    totalCategories: number;
+    totalAssignees: number;
+    activeAssignments: number;
+    statusCounts: { working: number; malfunctioning: number; damaged: number };
+  }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -401,6 +478,301 @@ export class DatabaseStorage implements IStorage {
       await this.createDepartment({ name: "HR & Admin", description: "Human resources and administration" });
       console.log("Default departments created");
     }
+  }
+
+  // ==================== ASSET MANAGEMENT ====================
+
+  // Manufacturer operations
+  async getManufacturers(): Promise<(Manufacturer & { assetCount: number })[]> {
+    const result = await db
+      .select({
+        id: manufacturers.id,
+        name: manufacturers.name,
+        description: manufacturers.description,
+        website: manufacturers.website,
+        contactEmail: manufacturers.contactEmail,
+        contactPhone: manufacturers.contactPhone,
+        createdAt: manufacturers.createdAt,
+        updatedAt: manufacturers.updatedAt,
+        assetCount: sql<number>`cast(count(${assets.id}) as int)`,
+      })
+      .from(manufacturers)
+      .leftJoin(assets, eq(assets.manufacturerId, manufacturers.id))
+      .groupBy(manufacturers.id)
+      .orderBy(manufacturers.name);
+    return result;
+  }
+
+  async getManufacturer(id: number): Promise<Manufacturer | undefined> {
+    const [m] = await db.select().from(manufacturers).where(eq(manufacturers.id, id));
+    return m || undefined;
+  }
+
+  async createManufacturer(m: InsertManufacturer): Promise<Manufacturer> {
+    const [created] = await db.insert(manufacturers).values(m).returning();
+    return created;
+  }
+
+  async updateManufacturer(id: number, m: Partial<InsertManufacturer>): Promise<Manufacturer | undefined> {
+    const [updated] = await db.update(manufacturers).set({ ...m, updatedAt: new Date() }).where(eq(manufacturers.id, id)).returning();
+    return updated;
+  }
+
+  async deleteManufacturer(id: number): Promise<boolean> {
+    await db.update(assets).set({ manufacturerId: null }).where(eq(assets.manufacturerId, id));
+    const result = await db.delete(manufacturers).where(eq(manufacturers.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  // Location operations
+  async getLocations(): Promise<(Location & { assetCount: number })[]> {
+    const result = await db
+      .select({
+        id: locations.id,
+        name: locations.name,
+        description: locations.description,
+        address: locations.address,
+        building: locations.building,
+        floor: locations.floor,
+        room: locations.room,
+        createdAt: locations.createdAt,
+        updatedAt: locations.updatedAt,
+        assetCount: sql<number>`cast(count(${assets.id}) as int)`,
+      })
+      .from(locations)
+      .leftJoin(assets, eq(assets.locationId, locations.id))
+      .groupBy(locations.id)
+      .orderBy(locations.name);
+    return result;
+  }
+
+  async getLocation(id: number): Promise<Location | undefined> {
+    const [l] = await db.select().from(locations).where(eq(locations.id, id));
+    return l || undefined;
+  }
+
+  async createLocation(l: InsertLocation): Promise<Location> {
+    const [created] = await db.insert(locations).values(l).returning();
+    return created;
+  }
+
+  async updateLocation(id: number, l: Partial<InsertLocation>): Promise<Location | undefined> {
+    const [updated] = await db.update(locations).set({ ...l, updatedAt: new Date() }).where(eq(locations.id, id)).returning();
+    return updated;
+  }
+
+  async deleteLocation(id: number): Promise<boolean> {
+    await db.update(assets).set({ locationId: null }).where(eq(assets.locationId, id));
+    const result = await db.delete(locations).where(eq(locations.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  // Asset Category operations
+  async getAssetCategories(): Promise<(AssetCategory & { assetCount: number })[]> {
+    const result = await db
+      .select({
+        id: assetCategories.id,
+        name: assetCategories.name,
+        description: assetCategories.description,
+        createdAt: assetCategories.createdAt,
+        updatedAt: assetCategories.updatedAt,
+        assetCount: sql<number>`cast(count(${assets.id}) as int)`,
+      })
+      .from(assetCategories)
+      .leftJoin(assets, eq(assets.categoryId, assetCategories.id))
+      .groupBy(assetCategories.id)
+      .orderBy(assetCategories.name);
+    return result;
+  }
+
+  async getAssetCategory(id: number): Promise<AssetCategory | undefined> {
+    const [c] = await db.select().from(assetCategories).where(eq(assetCategories.id, id));
+    return c || undefined;
+  }
+
+  async createAssetCategory(c: InsertAssetCategory): Promise<AssetCategory> {
+    const [created] = await db.insert(assetCategories).values(c).returning();
+    return created;
+  }
+
+  async updateAssetCategory(id: number, c: Partial<InsertAssetCategory>): Promise<AssetCategory | undefined> {
+    const [updated] = await db.update(assetCategories).set({ ...c, updatedAt: new Date() }).where(eq(assetCategories.id, id)).returning();
+    return updated;
+  }
+
+  async deleteAssetCategory(id: number): Promise<boolean> {
+    await db.delete(assetSubCategories).where(eq(assetSubCategories.categoryId, id));
+    await db.update(assets).set({ categoryId: null }).where(eq(assets.categoryId, id));
+    const result = await db.delete(assetCategories).where(eq(assetCategories.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  // Asset SubCategory operations
+  async getAssetSubCategories(): Promise<(AssetSubCategory & { category?: AssetCategory | null; assetCount: number })[]> {
+    const subs = await db.select().from(assetSubCategories).orderBy(assetSubCategories.name);
+    const result: (AssetSubCategory & { category?: AssetCategory | null; assetCount: number })[] = [];
+    for (const sub of subs) {
+      const [cat] = await db.select().from(assetCategories).where(eq(assetCategories.id, sub.categoryId));
+      const [countResult] = await db.select({ count: sql<number>`cast(count(*) as int)` }).from(assets).where(eq(assets.subCategoryId, sub.id));
+      result.push({ ...sub, category: cat || null, assetCount: countResult?.count ?? 0 });
+    }
+    return result;
+  }
+
+  async getAssetSubCategoriesByCategory(categoryId: number): Promise<AssetSubCategory[]> {
+    return db.select().from(assetSubCategories).where(eq(assetSubCategories.categoryId, categoryId)).orderBy(assetSubCategories.name);
+  }
+
+  async getAssetSubCategory(id: number): Promise<AssetSubCategory | undefined> {
+    const [sc] = await db.select().from(assetSubCategories).where(eq(assetSubCategories.id, id));
+    return sc || undefined;
+  }
+
+  async createAssetSubCategory(sc: InsertAssetSubCategory): Promise<AssetSubCategory> {
+    const [created] = await db.insert(assetSubCategories).values(sc).returning();
+    return created;
+  }
+
+  async updateAssetSubCategory(id: number, sc: Partial<InsertAssetSubCategory>): Promise<AssetSubCategory | undefined> {
+    const [updated] = await db.update(assetSubCategories).set({ ...sc, updatedAt: new Date() }).where(eq(assetSubCategories.id, id)).returning();
+    return updated;
+  }
+
+  async deleteAssetSubCategory(id: number): Promise<boolean> {
+    await db.update(assets).set({ subCategoryId: null }).where(eq(assets.subCategoryId, id));
+    const result = await db.delete(assetSubCategories).where(eq(assetSubCategories.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  // Asset operations
+  async getAssets(): Promise<AssetWithRelations[]> {
+    const allAssets = await db.select().from(assets).orderBy(desc(assets.createdAt));
+    const result: AssetWithRelations[] = [];
+    for (const asset of allAssets) {
+      const [cat] = asset.categoryId ? await db.select().from(assetCategories).where(eq(assetCategories.id, asset.categoryId)) : [null];
+      const [sub] = asset.subCategoryId ? await db.select().from(assetSubCategories).where(eq(assetSubCategories.id, asset.subCategoryId)) : [null];
+      const [mfr] = asset.manufacturerId ? await db.select().from(manufacturers).where(eq(manufacturers.id, asset.manufacturerId)) : [null];
+      const [loc] = asset.locationId ? await db.select().from(locations).where(eq(locations.id, asset.locationId)) : [null];
+      result.push({ ...asset, category: cat, subCategory: sub, manufacturerRef: mfr, location: loc });
+    }
+    return result;
+  }
+
+  async getRecentAssets(limit: number): Promise<Asset[]> {
+    return db.select().from(assets).orderBy(desc(assets.createdAt)).limit(limit);
+  }
+
+  async getAsset(id: number): Promise<Asset | undefined> {
+    const [a] = await db.select().from(assets).where(eq(assets.id, id));
+    return a || undefined;
+  }
+
+  async generateAssetCode(): Promise<string> {
+    const [seq] = await db.select().from(assetCodeSequence).where(eq(assetCodeSequence.id, 1));
+    const nextNumber = (seq?.lastNumber ?? 0) + 1;
+    if (seq) {
+      await db.update(assetCodeSequence).set({ lastNumber: nextNumber }).where(eq(assetCodeSequence.id, 1));
+    } else {
+      await db.insert(assetCodeSequence).values({ id: 1, lastNumber: nextNumber });
+    }
+    return `AST-${String(nextNumber).padStart(4, '0')}`;
+  }
+
+  async createAsset(a: InsertAsset): Promise<Asset> {
+    if (!a.code) {
+      a.code = await this.generateAssetCode();
+    }
+    const [created] = await db.insert(assets).values(a as any).returning();
+    return created;
+  }
+
+  async updateAsset(id: number, a: Partial<InsertAsset>): Promise<Asset | undefined> {
+    const [updated] = await db.update(assets).set({ ...a, updatedAt: new Date() } as any).where(eq(assets.id, id)).returning();
+    return updated;
+  }
+
+  async deleteAsset(id: number): Promise<boolean> {
+    await db.delete(assetAssignments).where(eq(assetAssignments.assetId, id));
+    const result = await db.delete(assets).where(eq(assets.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  // Asset Assignment operations
+  async getAssetAssignments(): Promise<AssetAssignmentWithDetails[]> {
+    const allAssignments = await db.select().from(assetAssignments).orderBy(desc(assetAssignments.createdAt));
+    const result: AssetAssignmentWithDetails[] = [];
+    for (const assignment of allAssignments) {
+      const [asset] = await db.select().from(assets).where(eq(assets.id, assignment.assetId));
+      const [employee] = await db.select().from(employees).where(eq(employees.id, assignment.employeeId));
+      result.push({ ...assignment, asset: asset || null, employee: employee || null });
+    }
+    return result;
+  }
+
+  async getRecentAssetAssignments(limit: number): Promise<AssetAssignmentWithDetails[]> {
+    const recentAssignments = await db.select().from(assetAssignments).orderBy(desc(assetAssignments.createdAt)).limit(limit);
+    const result: AssetAssignmentWithDetails[] = [];
+    for (const assignment of recentAssignments) {
+      const [asset] = await db.select().from(assets).where(eq(assets.id, assignment.assetId));
+      const [employee] = await db.select().from(employees).where(eq(employees.id, assignment.employeeId));
+      result.push({ ...assignment, asset: asset || null, employee: employee || null });
+    }
+    return result;
+  }
+
+  async getAssetAssignment(id: number): Promise<AssetAssignment | undefined> {
+    const [a] = await db.select().from(assetAssignments).where(eq(assetAssignments.id, id));
+    return a || undefined;
+  }
+
+  async getAssetAssignmentsByAsset(assetId: number): Promise<AssetAssignmentWithDetails[]> {
+    const assignmentsList = await db.select().from(assetAssignments).where(eq(assetAssignments.assetId, assetId)).orderBy(desc(assetAssignments.assignmentDate));
+    const result: AssetAssignmentWithDetails[] = [];
+    for (const assignment of assignmentsList) {
+      const [asset] = await db.select().from(assets).where(eq(assets.id, assignment.assetId));
+      const [employee] = await db.select().from(employees).where(eq(employees.id, assignment.employeeId));
+      result.push({ ...assignment, asset: asset || null, employee: employee || null });
+    }
+    return result;
+  }
+
+  async createAssetAssignment(a: InsertAssetAssignment): Promise<AssetAssignment> {
+    const [created] = await db.insert(assetAssignments).values(a).returning();
+    return created;
+  }
+
+  async updateAssetAssignment(id: number, a: Partial<InsertAssetAssignment>): Promise<AssetAssignment | undefined> {
+    const [updated] = await db.update(assetAssignments).set({ ...a, updatedAt: new Date() }).where(eq(assetAssignments.id, id)).returning();
+    return updated;
+  }
+
+  async deleteAssetAssignment(id: number): Promise<boolean> {
+    const result = await db.delete(assetAssignments).where(eq(assetAssignments.id, id));
+    return result.rowCount ? result.rowCount > 0 : false;
+  }
+
+  // Asset Dashboard stats
+  async getAssetDashboardStats() {
+    const [totalAssetsResult] = await db.select({ count: sql<number>`cast(count(*) as int)` }).from(assets);
+    const [totalCategoriesResult] = await db.select({ count: sql<number>`cast(count(*) as int)` }).from(assetCategories);
+    const [totalAssigneesResult] = await db.select({ count: sql<number>`cast(count(DISTINCT ${assetAssignments.employeeId}) as int)` }).from(assetAssignments).where(isNull(assetAssignments.recoveryDate));
+    const [activeAssignmentsResult] = await db.select({ count: sql<number>`cast(count(*) as int)` }).from(assetAssignments).where(isNull(assetAssignments.recoveryDate));
+
+    const [workingResult] = await db.select({ count: sql<number>`cast(count(*) as int)` }).from(assets).where(eq(assets.status, "working"));
+    const [malfunctioningResult] = await db.select({ count: sql<number>`cast(count(*) as int)` }).from(assets).where(eq(assets.status, "malfunctioning"));
+    const [damagedResult] = await db.select({ count: sql<number>`cast(count(*) as int)` }).from(assets).where(eq(assets.status, "damaged"));
+
+    return {
+      totalAssets: totalAssetsResult?.count ?? 0,
+      totalCategories: totalCategoriesResult?.count ?? 0,
+      totalAssignees: totalAssigneesResult?.count ?? 0,
+      activeAssignments: activeAssignmentsResult?.count ?? 0,
+      statusCounts: {
+        working: workingResult?.count ?? 0,
+        malfunctioning: malfunctioningResult?.count ?? 0,
+        damaged: damagedResult?.count ?? 0,
+      },
+    };
   }
 }
 
