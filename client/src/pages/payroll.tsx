@@ -239,94 +239,121 @@ function printSalarySlip(record: PayrollRecordWithEmployee) {
 
   const netInWords = numberToWords(Math.round(netSalary));
 
+  const bgUrl = window.location.origin + "/slip-background.jpg";
+
   const html = `<!DOCTYPE html>
 <html>
 <head>
   <title>Salary Slip - ${record.employee.firstName} ${record.employee.lastName} - ${months[record.month - 1]} ${record.year}</title>
   <style>
     @media print {
-      @page { margin: 15mm; size: A4; }
+      @page { margin: 0; size: A4; }
       body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     }
-    body { font-family: Arial, sans-serif; font-size: 12px; color: #000; margin: 20px; }
+    * { box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; font-size: 12px; color: #000; margin: 0; padding: 0; }
+    .page {
+      width: 210mm;
+      min-height: 297mm;
+      position: relative;
+      margin: 0 auto;
+      background-image: url('${bgUrl}');
+      background-size: 210mm 297mm;
+      background-repeat: no-repeat;
+      background-position: top left;
+    }
+    .content {
+      padding-top: 76mm;
+      padding-left: 18mm;
+      padding-right: 18mm;
+      padding-bottom: 45mm;
+    }
     table { border-collapse: collapse; width: 100%; }
-    .header-table td { padding: 3px 0; font-size: 12px; }
-    .main-table td { font-size: 11px; }
-    .totals-table td { font-size: 12px; font-weight: bold; padding: 6px 8px; border: 1px solid #000; }
-    .note { font-size: 10px; color: #666; margin-top: 20px; }
+    .header-table td { padding: 3px 0; font-size: 11px; }
+    .main-table td { font-size: 10px; }
+    .main-table th { font-size: 10px; }
+    .totals-table td { font-size: 11px; font-weight: bold; padding: 5px 8px; border: 1px solid #000; }
+    .note { font-size: 9px; color: #555; margin-top: 15px; }
   </style>
 </head>
 <body>
-  <div style="max-width:750px;margin:0 auto;">
-    <h2 style="text-align:center;margin-bottom:5px;font-size:16px;">SALARY SLIP</h2>
-    <p style="text-align:right;margin-bottom:15px;font-size:11px;">Dated: ${dated}</p>
+  <div class="page">
+    <div class="content">
+      <h2 style="text-align:center;margin:0 0 4px 0;font-size:15px;letter-spacing:1px;">SALARY SLIP</h2>
+      <p style="text-align:right;margin:0 0 12px 0;font-size:10px;color:#555;">Dated: ${dated}</p>
 
-    <table class="header-table" style="margin-bottom:15px;width:100%;">
-      <tr>
-        <td style="width:20%"><strong>Employee Name:</strong></td>
-        <td style="width:35%">${record.employee.firstName} ${record.employee.lastName}</td>
-        <td style="width:20%"><strong>Designation:</strong></td>
-        <td style="width:25%">${record.employee.position || "-"}</td>
-      </tr>
-      <tr>
-        <td><strong>Employee Code:</strong></td>
-        <td>${record.employee.id}</td>
-        <td><strong>Working Days:</strong></td>
-        <td>${record.workingDaysInMonth || "-"}</td>
-      </tr>
-      <tr>
-        <td><strong>Joining Date:</strong></td>
-        <td>${hireDate}</td>
-        <td><strong>Over Time Hours:</strong></td>
-        <td>${overtimeHours > 0 ? overtimeHours.toFixed(1) : ""}</td>
-      </tr>
-      <tr>
-        <td><strong>Salary Month:</strong></td>
-        <td>${salaryMonth}</td>
-        <td></td>
-        <td></td>
-      </tr>
-    </table>
-
-    <table class="main-table" style="margin-bottom:0;">
-      <thead>
+      <table class="header-table" style="margin-bottom:12px;width:100%;">
         <tr>
-          <th style="padding:6px 8px;border:1px solid #000;text-align:left;background:#f0f0f0;width:40%">PAYMENTS</th>
-          <th style="padding:6px 8px;border:1px solid #000;text-align:right;background:#f0f0f0;width:15%">Amount</th>
-          <th style="padding:6px 8px;border:1px solid #000;text-align:left;background:#f0f0f0;width:30%">DEDUCTIONS</th>
-          <th style="padding:6px 8px;border:1px solid #000;text-align:right;background:#f0f0f0;width:15%">Amount</th>
+          <td style="width:20%"><strong>Employee Name:</strong></td>
+          <td style="width:35%">${record.employee.firstName} ${record.employee.lastName}</td>
+          <td style="width:20%"><strong>Designation:</strong></td>
+          <td style="width:25%">${record.employee.position || "-"}</td>
         </tr>
-      </thead>
-      <tbody>
-        ${tableRows}
-      </tbody>
-    </table>
+        <tr>
+          <td><strong>Employee Code:</strong></td>
+          <td>${record.employee.id}</td>
+          <td><strong>Working Days:</strong></td>
+          <td>${record.workingDaysInMonth || "-"}</td>
+        </tr>
+        <tr>
+          <td><strong>Joining Date:</strong></td>
+          <td>${hireDate}</td>
+          <td><strong>Over Time Hours:</strong></td>
+          <td>${overtimeHours > 0 ? overtimeHours.toFixed(1) : ""}</td>
+        </tr>
+        <tr>
+          <td><strong>Salary Month:</strong></td>
+          <td>${salaryMonth}</td>
+          <td></td>
+          <td></td>
+        </tr>
+      </table>
 
-    <table class="totals-table" style="margin-bottom:15px;">
-      <tr>
-        <td style="width:40%">Total Gross Salary</td>
-        <td style="width:15%;text-align:right">${formatNum(grossSalary + totalAllowances + bonuses + overtimePay)}</td>
-        <td style="width:30%">Total Deduction</td>
-        <td style="width:15%;text-align:right">${formatNum(totalDeductions)}</td>
-      </tr>
-      <tr>
-        <td colspan="3" style="text-align:left"><strong>Net Pay</strong></td>
-        <td style="text-align:right;font-size:14px;"><strong>${formatNum(netSalary)}</strong></td>
-      </tr>
-    </table>
+      <table class="main-table" style="margin-bottom:0;">
+        <thead>
+          <tr>
+            <th style="padding:5px 8px;border:1px solid #000;text-align:left;background:#f0f0f0;width:40%">PAYMENTS</th>
+            <th style="padding:5px 8px;border:1px solid #000;text-align:right;background:#f0f0f0;width:15%">Amount</th>
+            <th style="padding:5px 8px;border:1px solid #000;text-align:left;background:#f0f0f0;width:30%">DEDUCTIONS</th>
+            <th style="padding:5px 8px;border:1px solid #000;text-align:right;background:#f0f0f0;width:15%">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${tableRows}
+        </tbody>
+      </table>
 
-    <table style="width:100%;margin-bottom:20px;">
-      <tr>
-        <td style="padding:4px 0;font-size:11px;"><strong>In Words:</strong> ${netInWords}</td>
-      </tr>
-    </table>
+      <table class="totals-table" style="margin-bottom:10px;">
+        <tr>
+          <td style="width:40%">Total Gross Salary</td>
+          <td style="width:15%;text-align:right">${formatNum(grossSalary + totalAllowances + bonuses + overtimePay)}</td>
+          <td style="width:30%">Total Deduction</td>
+          <td style="width:15%;text-align:right">${formatNum(totalDeductions)}</td>
+        </tr>
+        <tr>
+          <td colspan="3" style="text-align:left"><strong>Net Pay</strong></td>
+          <td style="text-align:right;font-size:13px;"><strong>${formatNum(netSalary)}</strong></td>
+        </tr>
+      </table>
 
-    <div class="note">
-      <p>Note: No stamp/signature is needed.</p>
-      <p style="margin-top:2px;">Slip is computerized and automatically generated.</p>
+      <table style="width:100%;margin-bottom:12px;">
+        <tr>
+          <td style="padding:3px 0;font-size:10px;"><strong>In Words:</strong> ${netInWords}</td>
+        </tr>
+      </table>
+
+      <div class="note">
+        <p style="margin:0;">Note: No stamp/signature is needed.</p>
+        <p style="margin:2px 0 0 0;">Slip is computerized and automatically generated.</p>
+      </div>
     </div>
   </div>
-  <script>window.onload=function(){window.print();}<\/script>
+  <script>
+    var img = new Image();
+    img.onload = function() { window.print(); };
+    img.onerror = function() { window.print(); };
+    img.src = '${bgUrl}';
+  <\/script>
 </body>
 </html>`;
 
