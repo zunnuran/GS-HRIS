@@ -164,6 +164,7 @@ const payrollFormSchema = z.object({
   enableOvertime: z.boolean().default(false),
   leaveEncashmentDays: z.string().default("0"),
   advanceDeduction: z.string().default("0"),
+  taxDeduction: z.string().default("0"),
   allowanceItems: z.array(allowanceItemSchema).default([]),
   bonuses: z.string().default("0"),
   remarks: z.string().optional(),
@@ -183,6 +184,7 @@ interface PayrollCalculation {
   perHourRate: number;
   perDayRate: number;
   hoursDeduction: number;
+  taxDeduction: number;
   overtimeHours: number;
   overtimePay: number;
   grossSalary: number;
@@ -206,6 +208,7 @@ function calculatePayroll(
       perHourRate: 0,
       perDayRate: 0,
       hoursDeduction: 0,
+      taxDeduction: 0,
       overtimeHours: 0,
       overtimePay: 0,
       grossSalary: 0,
@@ -279,6 +282,7 @@ function calculatePayroll(
   }
 
   const advanceDeduction = parseFloat(formValues.advanceDeduction || "0");
+  const taxDeduction = parseFloat(formValues.taxDeduction || "0");
   
   // Sum all allowance values
   const totalAllowances = formValues.allowanceItems?.reduce((sum, item) => {
@@ -287,7 +291,7 @@ function calculatePayroll(
   
   const bonuses = parseFloat(formValues.bonuses || "0");
 
-  const netSalary = grossSalary - hoursDeduction - advanceDeduction + totalAllowances + bonuses + overtimePay;
+  const netSalary = grossSalary - hoursDeduction - advanceDeduction - taxDeduction + totalAllowances + bonuses + overtimePay;
 
   return {
     totalHoursWorked,
@@ -300,6 +304,7 @@ function calculatePayroll(
     perHourRate,
     perDayRate,
     hoursDeduction,
+    taxDeduction,
     overtimeHours,
     overtimePay,
     grossSalary,
@@ -494,6 +499,7 @@ function PayrollFormDialog({
       enableOvertime: editRecord.enableOvertime || false,
       leaveEncashmentDays: editRecord.leaveEncashmentDays?.toString() || "0",
       advanceDeduction: editRecord.advanceDeduction?.toString() || "0",
+      taxDeduction: editRecord.taxDeduction?.toString() || "0",
       allowanceItems: parseAllowanceDetails(editRecord),
       bonuses: editRecord.bonuses?.toString() || "0",
       remarks: editRecord.remarks || "",
@@ -518,6 +524,7 @@ function PayrollFormDialog({
       enableOvertime: false,
       leaveEncashmentDays: "0",
       advanceDeduction: "0",
+      taxDeduction: "0",
       allowanceItems: DEFAULT_ALLOWANCES.map(a => ({ label: a.label, value: "0" })),
       bonuses: "0",
       remarks: "",
@@ -549,6 +556,7 @@ function PayrollFormDialog({
         enableOvertime: editRecord.enableOvertime || false,
         leaveEncashmentDays: editRecord.leaveEncashmentDays?.toString() || "0",
         advanceDeduction: editRecord.advanceDeduction?.toString() || "0",
+        taxDeduction: editRecord.taxDeduction?.toString() || "0",
         allowanceItems: parseAllowanceDetails(editRecord),
         bonuses: editRecord.bonuses?.toString() || "0",
         remarks: editRecord.remarks || "",
@@ -577,6 +585,7 @@ function PayrollFormDialog({
         enableOvertime: false,
         leaveEncashmentDays: "0",
         advanceDeduction: "0",
+        taxDeduction: "0",
         allowanceItems: DEFAULT_ALLOWANCES.map(a => ({ label: a.label, value: "0" })),
         bonuses: "0",
         remarks: "",
@@ -667,6 +676,7 @@ function PayrollFormDialog({
       perDayRate: calc.perDayRate.toFixed(2),
       hoursDeduction: calc.hoursDeduction.toFixed(2),
       advanceDeduction: data.advanceDeduction || "0",
+      taxDeduction: data.taxDeduction || "0",
       allowanceDetails: allowanceDetails,
       allowances: calc.totalAllowances.toFixed(2),
       bonuses: data.bonuses || "0",
@@ -1027,56 +1037,99 @@ function PayrollFormDialog({
                 <Card>
                   <CardHeader className="pb-3">
                     <CardTitle className="text-sm font-medium">Allowances</CardTitle>
-                    <CardDescription>Default and custom allowances</CardDescription>
+                    <CardDescription>Select from predefined types or add custom</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    {allowanceFields.map((field, index) => (
-                      <div key={field.id} className="flex items-end gap-3">
-                        <FormField
-                          control={form.control}
-                          name={`allowanceItems.${index}.label`}
-                          render={({ field }) => (
-                            <FormItem className="flex-1">
-                              {index === 0 && <FormLabel>Allowance Type</FormLabel>}
-                              <FormControl>
-                                <Input 
-                                  placeholder="Allowance name" 
-                                  {...field} 
-                                  data-testid={`input-allowance-label-${index}`}
-                                />
-                              </FormControl>
-                            </FormItem>
+                    {allowanceFields.map((field, index) => {
+                      const currentLabel = form.watch(`allowanceItems.${index}.label`);
+                      const predefinedLabels = DEFAULT_ALLOWANCES.map(a => a.label);
+                      const isCustom = currentLabel !== "" && !predefinedLabels.includes(currentLabel);
+                      const selectValue = isCustom ? "__custom__" : currentLabel;
+
+                      return (
+                        <div key={field.id} className="space-y-2">
+                          <div className="flex items-end gap-3">
+                            <FormField
+                              control={form.control}
+                              name={`allowanceItems.${index}.label`}
+                              render={({ field: labelField }) => (
+                                <FormItem className="flex-1">
+                                  {index === 0 && <FormLabel>Allowance Type</FormLabel>}
+                                  <Select
+                                    value={selectValue}
+                                    onValueChange={(val) => {
+                                      if (val === "__custom__") {
+                                        labelField.onChange("");
+                                      } else {
+                                        labelField.onChange(val);
+                                      }
+                                    }}
+                                  >
+                                    <FormControl>
+                                      <SelectTrigger data-testid={`select-allowance-type-${index}`}>
+                                        <SelectValue placeholder="Select allowance type" />
+                                      </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                      {DEFAULT_ALLOWANCES.map((a) => (
+                                        <SelectItem key={a.label} value={a.label}>
+                                          {a.label}
+                                        </SelectItem>
+                                      ))}
+                                      <SelectItem value="__custom__">Custom (enter manually)</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={form.control}
+                              name={`allowanceItems.${index}.value`}
+                              render={({ field }) => (
+                                <FormItem className="w-32">
+                                  {index === 0 && <FormLabel>Amount (PKR)</FormLabel>}
+                                  <FormControl>
+                                    <Input 
+                                      type="number"
+                                      placeholder="0" 
+                                      {...field} 
+                                      data-testid={`input-allowance-value-${index}`}
+                                    />
+                                  </FormControl>
+                                </FormItem>
+                              )}
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => removeAllowance(index)}
+                              className="shrink-0"
+                              data-testid={`button-remove-allowance-${index}`}
+                            >
+                              <Trash2 className="h-4 w-4 text-muted-foreground" />
+                            </Button>
+                          </div>
+                          {(selectValue === "__custom__") && (
+                            <FormField
+                              control={form.control}
+                              name={`allowanceItems.${index}.label`}
+                              render={({ field }) => (
+                                <FormItem className="ml-0">
+                                  <FormControl>
+                                    <Input
+                                      placeholder="Enter custom allowance name"
+                                      {...field}
+                                      data-testid={`input-allowance-custom-label-${index}`}
+                                    />
+                                  </FormControl>
+                                </FormItem>
+                              )}
+                            />
                           )}
-                        />
-                        <FormField
-                          control={form.control}
-                          name={`allowanceItems.${index}.value`}
-                          render={({ field }) => (
-                            <FormItem className="w-32">
-                              {index === 0 && <FormLabel>Amount (PKR)</FormLabel>}
-                              <FormControl>
-                                <Input 
-                                  type="number"
-                                  placeholder="0" 
-                                  {...field} 
-                                  data-testid={`input-allowance-value-${index}`}
-                                />
-                              </FormControl>
-                            </FormItem>
-                          )}
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeAllowance(index)}
-                          className="shrink-0"
-                          data-testid={`button-remove-allowance-${index}`}
-                        >
-                          <Trash2 className="h-4 w-4 text-muted-foreground" />
-                        </Button>
-                      </div>
-                    ))}
+                        </div>
+                      );
+                    })}
                     <Button
                       type="button"
                       variant="outline"
@@ -1095,7 +1148,7 @@ function PayrollFormDialog({
                     <CardTitle className="text-sm font-medium">Other Adjustments</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="grid grid-cols-3 gap-4">
+                    <div className="grid grid-cols-2 gap-4">
                       <FormField
                         control={form.control}
                         name="leaveEncashmentDays"
@@ -1124,6 +1177,23 @@ function PayrollFormDialog({
                                 type="number" 
                                 {...field} 
                                 data-testid="input-advance-deduction"
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="taxDeduction"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Tax Deduction (PKR)</FormLabel>
+                            <FormControl>
+                              <Input 
+                                type="number" 
+                                {...field} 
+                                data-testid="input-tax-deduction"
                               />
                             </FormControl>
                             <FormMessage />
@@ -1283,6 +1353,10 @@ function PayrollFormDialog({
                           <div className="flex justify-between text-red-500">
                             <span>Advance Deduction</span>
                             <span className="font-mono">- {formatCurrency(parseFloat(formValues.advanceDeduction || "0"))}</span>
+                          </div>
+                          <div className="flex justify-between text-red-500">
+                            <span>Tax Deduction</span>
+                            <span className="font-mono">- {formatCurrency(parseFloat(formValues.taxDeduction || "0"))}</span>
                           </div>
                           <div className="flex justify-between text-green-600">
                             <span>Total Allowances</span>
@@ -1511,6 +1585,10 @@ function PayrollDetailDialog({
               <div className="flex justify-between text-red-500">
                 <span>Advance Deduction</span>
                 <span className="font-mono">- {formatCurrency(record.advanceDeduction || "0")}</span>
+              </div>
+              <div className="flex justify-between text-red-500">
+                <span>Tax Deduction</span>
+                <span className="font-mono">- {formatCurrency(record.taxDeduction || "0")}</span>
               </div>
               <div className="flex justify-between text-green-600">
                 <span>Total Allowances</span>

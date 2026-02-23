@@ -140,6 +140,7 @@ export const payrollRecords = pgTable("payroll_records", {
   // Deductions and adjustments
   hoursDeduction: decimal("hours_deduction", { precision: 12, scale: 2 }).default("0"),
   advanceDeduction: decimal("advance_deduction", { precision: 12, scale: 2 }).default("0"),
+  taxDeduction: decimal("tax_deduction", { precision: 12, scale: 2 }).default("0"),
   
   // Dynamic allowances stored as JSON: [{label: string, value: number}]
   allowanceDetails: text("allowance_details").default("[]"),

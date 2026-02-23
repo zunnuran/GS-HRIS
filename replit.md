@@ -64,7 +64,10 @@ A Human Resource Management and Asset Management system designed for a gaming co
 - Conversion helpers: timeToDecimal() converts "HH:MM" to decimal hours
 - Working days calculated at payroll time based on month/year, excluding Sundays
 - Allowance details stored as JSON array: [{label: string, value: number}]
+- Allowance types: Dropdown with predefined options (PDF, Child Education, Inpatient Allowance, Gym Allowance) + Custom option for manual entry
+- Tax deduction: Manual tax deduction field for annual tax tracking
 - Per-hour rate formula: grossSalary / (workingDays * requiredHoursPerDay)
+- Net salary formula: grossSalary - hoursDeduction - advanceDeduction - taxDeduction + totalAllowances + bonuses + overtimePay
 
 ### Asset Management Details
 - Assets auto-generate codes via `asset_code_sequence` table (AST-0001, AST-0002, etc.)
@@ -86,6 +89,7 @@ A Human Resource Management and Asset Management system designed for a gaming co
 - Stats: /api/dashboard/asset-stats
 
 ## Recent Changes
+- 2026-02-23: Added allowance type dropdown (PDF, Child Education, Inpatient, Gym + Custom) and tax deduction field to payroll
 - 2026-02-23: Integrated Asset Manager - assets, categories, sub-categories, manufacturers, locations, assignments
 - 2026-02-23: Updated sidebar with Asset Management section
 - 2026-02-23: Combined dashboard with HR + Asset stats
