@@ -57,7 +57,8 @@ import {
   Calendar,
   ChevronUp,
   ChevronDown,
-  Pencil
+  Pencil,
+  Printer
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -137,6 +138,203 @@ function calculateWorkingDays(month: number, year: number): number {
   }
   
   return workingDays;
+}
+
+function numberToWords(num: number): string {
+  if (num === 0) return "Zero";
+  const ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
+    "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
+  const tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+  const scales = ["", "Thousand", "Lakh", "Crore"];
+
+  function convertGroup(n: number): string {
+    if (n === 0) return "";
+    if (n < 20) return ones[n];
+    if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 ? " " + ones[n % 10] : "");
+    return ones[Math.floor(n / 100)] + " Hundred" + (n % 100 ? " " + convertGroup(n % 100) : "");
+  }
+
+  const n = Math.floor(Math.abs(num));
+  if (n === 0) return "Zero";
+
+  const groups: number[] = [];
+  let remaining = n;
+  groups.push(remaining % 1000);
+  remaining = Math.floor(remaining / 1000);
+  while (remaining > 0) {
+    groups.push(remaining % 100);
+    remaining = Math.floor(remaining / 100);
+  }
+
+  const parts: string[] = [];
+  for (let i = groups.length - 1; i >= 0; i--) {
+    if (groups[i] > 0) {
+      parts.push(convertGroup(groups[i]) + (scales[i] ? " " + scales[i] : ""));
+    }
+  }
+  return parts.join(" ") + " Rupees Only-";
+}
+
+function printSalarySlip(record: PayrollRecordWithEmployee) {
+  const months = ["January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"];
+
+  const shortMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+  let allowanceItems: AllowanceItem[] = [];
+  try {
+    allowanceItems = JSON.parse(record.allowanceDetails || "[]");
+  } catch {
+    allowanceItems = [];
+  }
+
+  const grossSalary = parseFloat(record.grossSalary) || 0;
+  const hoursDeduction = parseFloat(record.hoursDeduction || "0");
+  const advanceDeduction = parseFloat(record.advanceDeduction || "0");
+  const taxDeduction = parseFloat(record.taxDeduction || "0");
+  const bonuses = parseFloat(record.bonuses || "0");
+  const netSalary = parseFloat(record.netSalary || "0");
+  const overtimePay = parseFloat(record.overtimePay || "0");
+  const overtimeHours = parseFloat(record.overtimeHours || "0");
+  const totalDeductions = hoursDeduction + advanceDeduction + taxDeduction;
+  const totalAllowances = parseFloat(record.allowances || "0");
+
+  const formatNum = (v: number) => v.toLocaleString("en-PK");
+
+  const salaryMonth = `${shortMonths[record.month - 1]}-${record.year.toString().slice(-2)}`;
+  const hireDate = record.employee.hireDate
+    ? new Date(record.employee.hireDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+    : "-";
+
+  const today = new Date();
+  const dated = today.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+
+  const paymentRows = [
+    { label: "Basic:", value: grossSalary },
+    ...allowanceItems.map(a => ({ label: `${a.label}:`, value: typeof a.value === "string" ? parseFloat(a.value) || 0 : a.value })),
+    ...(bonuses > 0 ? [{ label: "Performance Bonus:", value: bonuses }] : [{ label: "Performance Bonus:", value: 0 }]),
+    ...(overtimePay > 0 ? [{ label: "Over Time:", value: overtimePay }] : []),
+  ];
+
+  const deductionRows = [
+    { label: "Tax Deduction", value: taxDeduction },
+    { label: "Advance Salary", value: advanceDeduction },
+    { label: "Time Deduction", value: hoursDeduction },
+  ];
+
+  const maxRows = Math.max(paymentRows.length, deductionRows.length);
+
+  let tableRows = "";
+  for (let i = 0; i < maxRows; i++) {
+    const pay = paymentRows[i];
+    const ded = deductionRows[i];
+    tableRows += `<tr>
+      <td style="padding:4px 8px;border:1px solid #000;width:40%">${pay ? pay.label : ""}</td>
+      <td style="padding:4px 8px;border:1px solid #000;text-align:right;width:15%">${pay ? formatNum(pay.value) : ""}</td>
+      <td style="padding:4px 8px;border:1px solid #000;width:30%">${ded ? ded.label : ""}</td>
+      <td style="padding:4px 8px;border:1px solid #000;text-align:right;width:15%">${ded ? formatNum(ded.value) : ""}</td>
+    </tr>`;
+  }
+
+  const netInWords = numberToWords(Math.round(netSalary));
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <title>Salary Slip - ${record.employee.firstName} ${record.employee.lastName} - ${months[record.month - 1]} ${record.year}</title>
+  <style>
+    @media print {
+      @page { margin: 15mm; size: A4; }
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+    body { font-family: Arial, sans-serif; font-size: 12px; color: #000; margin: 20px; }
+    table { border-collapse: collapse; width: 100%; }
+    .header-table td { padding: 3px 0; font-size: 12px; }
+    .main-table td { font-size: 11px; }
+    .totals-table td { font-size: 12px; font-weight: bold; padding: 6px 8px; border: 1px solid #000; }
+    .note { font-size: 10px; color: #666; margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <div style="max-width:750px;margin:0 auto;">
+    <h2 style="text-align:center;margin-bottom:5px;font-size:16px;">SALARY SLIP</h2>
+    <p style="text-align:right;margin-bottom:15px;font-size:11px;">Dated: ${dated}</p>
+
+    <table class="header-table" style="margin-bottom:15px;width:100%;">
+      <tr>
+        <td style="width:20%"><strong>Employee Name:</strong></td>
+        <td style="width:35%">${record.employee.firstName} ${record.employee.lastName}</td>
+        <td style="width:20%"><strong>Designation:</strong></td>
+        <td style="width:25%">${record.employee.position || "-"}</td>
+      </tr>
+      <tr>
+        <td><strong>Employee Code:</strong></td>
+        <td>${record.employee.id}</td>
+        <td><strong>Working Days:</strong></td>
+        <td>${record.workingDaysInMonth || "-"}</td>
+      </tr>
+      <tr>
+        <td><strong>Joining Date:</strong></td>
+        <td>${hireDate}</td>
+        <td><strong>Over Time Hours:</strong></td>
+        <td>${overtimeHours > 0 ? overtimeHours.toFixed(1) : ""}</td>
+      </tr>
+      <tr>
+        <td><strong>Salary Month:</strong></td>
+        <td>${salaryMonth}</td>
+        <td></td>
+        <td></td>
+      </tr>
+    </table>
+
+    <table class="main-table" style="margin-bottom:0;">
+      <thead>
+        <tr>
+          <th style="padding:6px 8px;border:1px solid #000;text-align:left;background:#f0f0f0;width:40%">PAYMENTS</th>
+          <th style="padding:6px 8px;border:1px solid #000;text-align:right;background:#f0f0f0;width:15%">Amount</th>
+          <th style="padding:6px 8px;border:1px solid #000;text-align:left;background:#f0f0f0;width:30%">DEDUCTIONS</th>
+          <th style="padding:6px 8px;border:1px solid #000;text-align:right;background:#f0f0f0;width:15%">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${tableRows}
+      </tbody>
+    </table>
+
+    <table class="totals-table" style="margin-bottom:15px;">
+      <tr>
+        <td style="width:40%">Total Gross Salary</td>
+        <td style="width:15%;text-align:right">${formatNum(grossSalary + totalAllowances + bonuses + overtimePay)}</td>
+        <td style="width:30%">Total Deduction</td>
+        <td style="width:15%;text-align:right">${formatNum(totalDeductions)}</td>
+      </tr>
+      <tr>
+        <td colspan="3" style="text-align:left"><strong>Net Pay</strong></td>
+        <td style="text-align:right;font-size:14px;"><strong>${formatNum(netSalary)}</strong></td>
+      </tr>
+    </table>
+
+    <table style="width:100%;margin-bottom:20px;">
+      <tr>
+        <td style="padding:4px 0;font-size:11px;"><strong>In Words:</strong> ${netInWords}</td>
+      </tr>
+    </table>
+
+    <div class="note">
+      <p>Note: No stamp/signature is needed.</p>
+      <p style="margin-top:2px;">Slip is computerized and automatically generated.</p>
+    </div>
+  </div>
+  <script>window.onload=function(){window.print();}<\/script>
+</body>
+</html>`;
+
+  const printWindow = window.open("", "_blank");
+  if (printWindow) {
+    printWindow.document.write(html);
+    printWindow.document.close();
+  }
 }
 
 const allowanceItemSchema = z.object({
@@ -1513,10 +1711,22 @@ function PayrollDetailDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
-            Payroll Details
-          </DialogTitle>
+          <div className="flex items-center justify-between">
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              Payroll Details
+            </DialogTitle>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => printSalarySlip(record)}
+              className="flex items-center gap-2"
+              data-testid="button-print-detail"
+            >
+              <Printer className="h-4 w-4" />
+              Print Slip
+            </Button>
+          </div>
         </DialogHeader>
         
         <div className="space-y-6">
@@ -1831,6 +2041,14 @@ export default function Payroll() {
                             data-testid={`button-edit-${record.id}`}
                           >
                             <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="icon"
+                            onClick={() => printSalarySlip(record)}
+                            data-testid={`button-print-${record.id}`}
+                          >
+                            <Printer className="h-4 w-4" />
                           </Button>
                         </div>
                       </TableCell>
