@@ -443,6 +443,140 @@ function TimeInput({
   );
 }
 
+const PREDEFINED_ALLOWANCE_LABELS = DEFAULT_ALLOWANCES.map(a => a.label);
+
+function AllowanceRow({ form, index, onRemove }: { form: any; index: number; onRemove: () => void }) {
+  const currentLabel = form.watch(`allowanceItems.${index}.label`);
+  const isPredefined = PREDEFINED_ALLOWANCE_LABELS.includes(currentLabel);
+  const [isCustomMode, setIsCustomMode] = useState(() => {
+    return currentLabel !== "" && !isPredefined;
+  });
+
+  const selectDisplayValue = isCustomMode ? "__custom__" : (isPredefined ? currentLabel : "");
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-end gap-3">
+        <FormField
+          control={form.control}
+          name={`allowanceItems.${index}.label`}
+          render={({ field: labelField }) => (
+            <FormItem className="flex-1">
+              {index === 0 && <FormLabel>Allowance Type</FormLabel>}
+              <Select
+                value={selectDisplayValue}
+                onValueChange={(val) => {
+                  if (val === "__custom__") {
+                    setIsCustomMode(true);
+                    labelField.onChange("");
+                  } else {
+                    setIsCustomMode(false);
+                    labelField.onChange(val);
+                  }
+                }}
+              >
+                <FormControl>
+                  <SelectTrigger data-testid={`select-allowance-type-${index}`}>
+                    <SelectValue placeholder="Select allowance type" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {DEFAULT_ALLOWANCES.map((a) => (
+                    <SelectItem key={a.label} value={a.label}>
+                      {a.label}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value="__custom__">Custom (enter manually)</SelectItem>
+                </SelectContent>
+              </Select>
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name={`allowanceItems.${index}.value`}
+          render={({ field }) => (
+            <FormItem className="w-32">
+              {index === 0 && <FormLabel>Amount (PKR)</FormLabel>}
+              <FormControl>
+                <Input 
+                  type="number"
+                  placeholder="0" 
+                  {...field} 
+                  data-testid={`input-allowance-value-${index}`}
+                />
+              </FormControl>
+            </FormItem>
+          )}
+        />
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={onRemove}
+          className="shrink-0"
+          data-testid={`button-remove-allowance-${index}`}
+        >
+          <Trash2 className="h-4 w-4 text-muted-foreground" />
+        </Button>
+      </div>
+      {isCustomMode && (
+        <FormField
+          control={form.control}
+          name={`allowanceItems.${index}.label`}
+          render={({ field }) => (
+            <FormItem>
+              <FormControl>
+                <Input
+                  placeholder="Enter custom allowance name"
+                  {...field}
+                  data-testid={`input-allowance-custom-label-${index}`}
+                />
+              </FormControl>
+            </FormItem>
+          )}
+        />
+      )}
+    </div>
+  );
+}
+
+function AllowancesCard({ form, allowanceFields, appendAllowance, removeAllowance }: {
+  form: any;
+  allowanceFields: any[];
+  appendAllowance: (value: { label: string; value: string }) => void;
+  removeAllowance: (index: number) => void;
+}) {
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm font-medium">Allowances</CardTitle>
+        <CardDescription>Select from predefined types or add custom</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {allowanceFields.map((field, index) => (
+          <AllowanceRow
+            key={field.id}
+            form={form}
+            index={index}
+            onRemove={() => removeAllowance(index)}
+          />
+        ))}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => appendAllowance({ label: "", value: "0" })}
+          data-testid="button-add-allowance"
+        >
+          <Plus className="h-4 w-4 mr-2" />
+          Add Allowance
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 function PayrollFormDialog({
   open,
   onOpenChange,
@@ -1034,114 +1168,12 @@ function PayrollFormDialog({
                   </CardContent>
                 </Card>
 
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-sm font-medium">Allowances</CardTitle>
-                    <CardDescription>Select from predefined types or add custom</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {allowanceFields.map((field, index) => {
-                      const currentLabel = form.watch(`allowanceItems.${index}.label`);
-                      const predefinedLabels = DEFAULT_ALLOWANCES.map(a => a.label);
-                      const isCustom = currentLabel !== "" && !predefinedLabels.includes(currentLabel);
-                      const selectValue = isCustom ? "__custom__" : currentLabel;
-
-                      return (
-                        <div key={field.id} className="space-y-2">
-                          <div className="flex items-end gap-3">
-                            <FormField
-                              control={form.control}
-                              name={`allowanceItems.${index}.label`}
-                              render={({ field: labelField }) => (
-                                <FormItem className="flex-1">
-                                  {index === 0 && <FormLabel>Allowance Type</FormLabel>}
-                                  <Select
-                                    value={selectValue}
-                                    onValueChange={(val) => {
-                                      if (val === "__custom__") {
-                                        labelField.onChange("");
-                                      } else {
-                                        labelField.onChange(val);
-                                      }
-                                    }}
-                                  >
-                                    <FormControl>
-                                      <SelectTrigger data-testid={`select-allowance-type-${index}`}>
-                                        <SelectValue placeholder="Select allowance type" />
-                                      </SelectTrigger>
-                                    </FormControl>
-                                    <SelectContent>
-                                      {DEFAULT_ALLOWANCES.map((a) => (
-                                        <SelectItem key={a.label} value={a.label}>
-                                          {a.label}
-                                        </SelectItem>
-                                      ))}
-                                      <SelectItem value="__custom__">Custom (enter manually)</SelectItem>
-                                    </SelectContent>
-                                  </Select>
-                                </FormItem>
-                              )}
-                            />
-                            <FormField
-                              control={form.control}
-                              name={`allowanceItems.${index}.value`}
-                              render={({ field }) => (
-                                <FormItem className="w-32">
-                                  {index === 0 && <FormLabel>Amount (PKR)</FormLabel>}
-                                  <FormControl>
-                                    <Input 
-                                      type="number"
-                                      placeholder="0" 
-                                      {...field} 
-                                      data-testid={`input-allowance-value-${index}`}
-                                    />
-                                  </FormControl>
-                                </FormItem>
-                              )}
-                            />
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => removeAllowance(index)}
-                              className="shrink-0"
-                              data-testid={`button-remove-allowance-${index}`}
-                            >
-                              <Trash2 className="h-4 w-4 text-muted-foreground" />
-                            </Button>
-                          </div>
-                          {(selectValue === "__custom__") && (
-                            <FormField
-                              control={form.control}
-                              name={`allowanceItems.${index}.label`}
-                              render={({ field }) => (
-                                <FormItem className="ml-0">
-                                  <FormControl>
-                                    <Input
-                                      placeholder="Enter custom allowance name"
-                                      {...field}
-                                      data-testid={`input-allowance-custom-label-${index}`}
-                                    />
-                                  </FormControl>
-                                </FormItem>
-                              )}
-                            />
-                          )}
-                        </div>
-                      );
-                    })}
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => appendAllowance({ label: "", value: "0" })}
-                      data-testid="button-add-allowance"
-                    >
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add Allowance
-                    </Button>
-                  </CardContent>
-                </Card>
+                <AllowancesCard
+                  form={form}
+                  allowanceFields={allowanceFields}
+                  appendAllowance={appendAllowance}
+                  removeAllowance={removeAllowance}
+                />
 
                 <Card>
                   <CardHeader className="pb-3">
