@@ -1899,6 +1899,7 @@ export default function Payroll() {
   const [detailRecord, setDetailRecord] = useState<PayrollRecordWithEmployee | null>(null);
   const [monthFilter, setMonthFilter] = useState<string>("all");
   const [yearFilter, setYearFilter] = useState<string>(new Date().getFullYear().toString());
+  const [statusFilter, setStatusFilter] = useState<string>("all");
 
   const { data: payrollRecords, isLoading } = useQuery<PayrollRecordWithEmployee[]>({
     queryKey: ["/api/payroll"],
@@ -1911,6 +1912,7 @@ export default function Payroll() {
   const filteredRecords = payrollRecords?.filter((record) => {
     if (monthFilter !== "all" && record.month.toString() !== monthFilter) return false;
     if (record.year.toString() !== yearFilter) return false;
+    if (statusFilter !== "all" && (record.status || "draft") !== statusFilter) return false;
     return true;
   });
 
@@ -1992,6 +1994,18 @@ export default function Payroll() {
                       {year}
                     </SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-32" data-testid="filter-status">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="draft">Draft</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="approved">Approved</SelectItem>
+                  <SelectItem value="paid">Paid</SelectItem>
                 </SelectContent>
               </Select>
             </div>
