@@ -89,6 +89,9 @@ A Human Resource Management and Asset Management system designed for a gaming co
 - Stats: /api/dashboard/asset-stats
 
 ## Recent Changes
+- 2026-02-25: Salary slip: bold "Note:", CNIC above Designation (xxxxx-xxxxxxx-x format), "Lakh" → "Lac", removed Net Pay cell borders
+- 2026-02-25: Added CNIC field to employees schema and form
+- 2026-02-25: Added status filter (draft/pending/approved/paid) to payroll records list
 - 2026-02-23: Added allowance type dropdown (PDF, Child Education, Inpatient, Gym + Custom) and tax deduction field to payroll
 - 2026-02-23: Integrated Asset Manager - assets, categories, sub-categories, manufacturers, locations, assignments
 - 2026-02-23: Updated sidebar with Asset Management section

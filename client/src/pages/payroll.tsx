@@ -145,7 +145,7 @@ function numberToWords(num: number): string {
   const ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
     "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
   const tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
-  const scales = ["", "Thousand", "Lakh", "Crore"];
+  const scales = ["", "Thousand", "Lac", "Crore"];
 
   function convertGroup(n: number): string {
     if (n === 0) return "";
@@ -286,26 +286,26 @@ function printSalarySlip(record: PayrollRecordWithEmployee) {
         <tr>
           <td style="width:20%"><strong>Employee Name:</strong></td>
           <td style="width:35%">${record.employee.firstName} ${record.employee.lastName}</td>
-          <td style="width:20%"><strong>Designation:</strong></td>
-          <td style="width:25%">${record.employee.position || "-"}</td>
+          <td style="width:20%"><strong>CNIC:</strong></td>
+          <td style="width:25%">${record.employee.cnic || "-"}</td>
         </tr>
         <tr>
+          <td><strong>Designation:</strong></td>
+          <td>${record.employee.position || "-"}</td>
           <td><strong>Employee Code:</strong></td>
           <td>${record.employee.id}</td>
-          <td><strong>Working Days:</strong></td>
-          <td>${record.workingDaysInMonth || "-"}</td>
         </tr>
         <tr>
           <td><strong>Joining Date:</strong></td>
           <td>${hireDate}</td>
-          <td><strong>Over Time Hours:</strong></td>
-          <td>${overtimeHours > 0 ? overtimeHours.toFixed(1) : ""}</td>
+          <td><strong>Working Days:</strong></td>
+          <td>${record.workingDaysInMonth || "-"}</td>
         </tr>
         <tr>
           <td><strong>Salary Month:</strong></td>
           <td>${salaryMonth}</td>
-          <td></td>
-          <td></td>
+          <td><strong>Over Time Hours:</strong></td>
+          <td>${overtimeHours > 0 ? overtimeHours.toFixed(1) : ""}</td>
         </tr>
       </table>
 
@@ -331,8 +331,8 @@ function printSalarySlip(record: PayrollRecordWithEmployee) {
           <td style="width:15%;text-align:right">${formatNum(totalDeductions)}</td>
         </tr>
         <tr>
-          <td colspan="3" style="text-align:left"><strong>Net Pay</strong></td>
-          <td style="text-align:right;font-size:13px;"><strong>${formatNum(netSalary)}</strong></td>
+          <td colspan="3" style="text-align:left;border:none;"><strong>Net Pay</strong></td>
+          <td style="text-align:right;font-size:13px;border:none;"><strong>${formatNum(netSalary)}</strong></td>
         </tr>
       </table>
 
@@ -343,7 +343,7 @@ function printSalarySlip(record: PayrollRecordWithEmployee) {
       </table>
 
       <div class="note">
-        <p style="margin:0;">Note: No stamp/signature is needed.</p>
+        <p style="margin:0;"><strong>Note:</strong> No stamp/signature is needed.</p>
         <p style="margin:2px 0 0 0;">Slip is computerized and automatically generated.</p>
       </div>
     </div>

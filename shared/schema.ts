@@ -53,6 +53,7 @@ export const employees = pgTable("employees", {
   phone: text("phone"),
   departmentId: integer("department_id").references(() => departments.id),
   position: text("position"),
+  cnic: text("cnic"),
   
   // Payroll attributes
   grossSalary: decimal("gross_salary", { precision: 12, scale: 2 }).notNull(),

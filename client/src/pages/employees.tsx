@@ -71,6 +71,7 @@ const employeeFormSchema = z.object({
   lastName: z.string().min(1, "Last name is required"),
   email: z.string().email("Invalid email").optional().or(z.literal("")),
   phone: z.string().optional(),
+  cnic: z.string().optional(),
   departmentId: z.string().optional(),
   position: z.string().optional(),
   grossSalary: z.string().min(1, "Gross salary is required"),
@@ -104,6 +105,7 @@ function EmployeeFormDialog({
       lastName: "",
       email: "",
       phone: "",
+      cnic: "",
       departmentId: "",
       position: "",
       grossSalary: "",
@@ -123,6 +125,7 @@ function EmployeeFormDialog({
         lastName: employee.lastName ?? "",
         email: employee.email ?? "",
         phone: employee.phone ?? "",
+        cnic: employee.cnic ?? "",
         departmentId: employee.departmentId?.toString() ?? "",
         position: employee.position ?? "",
         grossSalary: employee.grossSalary ?? "",
@@ -138,6 +141,7 @@ function EmployeeFormDialog({
         lastName: "",
         email: "",
         phone: "",
+        cnic: "",
         departmentId: "",
         position: "",
         grossSalary: "",
@@ -158,6 +162,7 @@ function EmployeeFormDialog({
         workingDaysPerMonth: parseInt(data.workingDaysPerMonth),
         email: data.email || null,
         phone: data.phone || null,
+        cnic: data.cnic || null,
         position: data.position || null,
         hireDate: data.hireDate || null,
       };
@@ -183,6 +188,7 @@ function EmployeeFormDialog({
         workingDaysPerMonth: parseInt(data.workingDaysPerMonth),
         email: data.email || null,
         phone: data.phone || null,
+        cnic: data.cnic || null,
         position: data.position || null,
         hireDate: data.hireDate || null,
       };
@@ -286,6 +292,26 @@ function EmployeeFormDialog({
                         placeholder="+92 300 1234567" 
                         {...field} 
                         data-testid="input-phone"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="cnic"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>CNIC</FormLabel>
+                    <FormControl>
+                      <Input 
+                        placeholder="xxxxx-xxxxxxx-x" 
+                        {...field} 
+                        data-testid="input-cnic"
                       />
                     </FormControl>
                     <FormMessage />
