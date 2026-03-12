@@ -478,8 +478,8 @@ function calculatePayroll(
 
   // Calculate required hours from working days × hours per day (not from weekly expected totals)
   // This ensures per-hour rate updates when working days are changed
-  const requiredMonthlyHours = workingDaysInMonth * requiredHoursPerDay;
-  
+  const requiredMonthlyHours = week1Expected + week2Expected + week3Expected + week4Expected + week5Expected;
+
   // For hour difference calculation, use sum of weekly expected hours (what was actually scheduled)
   const scheduledHours = week1Expected + week2Expected + week3Expected + week4Expected + week5Expected;
 
@@ -1138,7 +1138,7 @@ function PayrollFormDialog({
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              {employees.map((emp) => (
+                              {employees.sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)).map((emp) => (
                                 <SelectItem key={emp.id} value={emp.id.toString()}>
                                   {emp.firstName} {emp.lastName} (ID: {emp.id})
                                 </SelectItem>
