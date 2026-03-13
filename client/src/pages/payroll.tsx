@@ -309,8 +309,8 @@ function printSalarySlip(record: PayrollRecordWithEmployee) {
         <tr>
           <td><strong>Salary Month:</strong></td>
           <td>${salaryMonth}</td>
-          <td><strong>OT / Missing Hours:</strong></td>
-          <td>${overtimeHours > 0 ? "OT: " + overtimeHours.toFixed(1) + " hrs" : adjustedHoursDifference > 0 ? "Missing: " + adjustedHoursDifference.toFixed(1) + " hrs" : ""}</td>
+          <td><strong>${overtimeHours > 0 ? "OT:" : adjustedHoursDifference > 0 ? "Missing Hours:" : ""}</strong></td>
+          <td>${overtimeHours > 0 ? overtimeHours.toFixed(1) + " hrs" : adjustedHoursDifference > 0 ? adjustedHoursDifference.toFixed(1) + " hrs" : ""}</td>
         </tr>
         <tr>
           <td><strong>Paid Leaves:</strong></td>
