@@ -311,6 +311,12 @@ function printSalarySlip(record: PayrollRecordWithEmployee) {
           <td><strong>Over Time Hours:</strong></td>
           <td>${overtimeHours > 0 ? overtimeHours.toFixed(1) : ""}</td>
         </tr>
+        <tr>
+          <td><strong>Paid Leaves:</strong></td>
+          <td>${parseFloat(record.paidLeaves || "0")} days</td>
+          <td></td>
+          <td></td>
+        </tr>
       </table>
 
       <table class="main-table" style="margin-bottom:0;">
