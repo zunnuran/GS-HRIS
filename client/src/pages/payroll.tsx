@@ -201,6 +201,7 @@ function printSalarySlip(record: PayrollRecordWithEmployee) {
   const netSalary = parseFloat(record.netSalary || "0");
   const overtimePay = parseFloat(record.overtimePay || "0");
   const overtimeHours = parseFloat(record.overtimeHours || "0");
+  const adjustedHoursDifference = parseFloat(record.adjustedHoursDifference || "0");
   const totalDeductions = hoursDeduction + advanceDeduction + taxDeduction;
   const totalAllowances = parseFloat(record.allowances || "0");
 
@@ -308,8 +309,8 @@ function printSalarySlip(record: PayrollRecordWithEmployee) {
         <tr>
           <td><strong>Salary Month:</strong></td>
           <td>${salaryMonth}</td>
-          <td><strong>Over Time Hours:</strong></td>
-          <td>${overtimeHours > 0 ? overtimeHours.toFixed(1) : ""}</td>
+          <td><strong>OT / Missing Hours:</strong></td>
+          <td>${overtimeHours > 0 ? "OT: " + overtimeHours.toFixed(1) + " hrs" : adjustedHoursDifference > 0 ? "Missing: " + adjustedHoursDifference.toFixed(1) + " hrs" : ""}</td>
         </tr>
         <tr>
           <td><strong>Paid Leaves:</strong></td>
