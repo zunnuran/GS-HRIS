@@ -377,7 +377,7 @@ function getMonthWeeksInfo(month: number, year: number) {
   while (current <= lastDay && weeks.length < 5) {
     const start = new Date(current);
     let end = new Date(current);
-    while (end.getDay() !== 6 && end.getTime() < lastDay.getTime()) {
+    while (end.getDay() !== 0 && end.getTime() < lastDay.getTime()) {
       end = new Date(end.getFullYear(), end.getMonth(), end.getDate() + 1);
     }
     let workingDays = 0;
@@ -387,7 +387,20 @@ function getMonthWeeksInfo(month: number, year: number) {
       d.setDate(d.getDate() + 1);
     }
     weeks.push({ start: new Date(start), end: new Date(end), workingDays });
-    current = new Date(end.getFullYear(), end.getMonth(), end.getDate() + 2);
+    current = new Date(end.getFullYear(), end.getMonth(), end.getDate() + 1);
+  }
+  // Extend the last week to cover remaining days at end of month
+  if (weeks.length > 0) {
+    const last = weeks[weeks.length - 1];
+    if (last.end < lastDay) {
+      const d = new Date(last.end);
+      d.setDate(d.getDate() + 1);
+      while (d <= lastDay) {
+        if (d.getDay() !== 0) last.workingDays++;
+        d.setDate(d.getDate() + 1);
+      }
+      last.end = new Date(lastDay);
+    }
   }
   return weeks;
 }

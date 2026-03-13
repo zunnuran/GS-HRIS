@@ -388,11 +388,16 @@ export async function registerRoutes(
         while (current <= lastDay && weeks.length < 5) {
           const start = new Date(current);
           let end = new Date(current);
-          while (end.getDay() !== 6 && end.getTime() < lastDay.getTime()) {
+          while (end.getDay() !== 0 && end.getTime() < lastDay.getTime()) {
             end = new Date(end.getFullYear(), end.getMonth(), end.getDate() + 1);
           }
           weeks.push({ start: new Date(start), end: new Date(end) });
-          current = new Date(end.getFullYear(), end.getMonth(), end.getDate() + 2);
+          current = new Date(end.getFullYear(), end.getMonth(), end.getDate() + 1);
+        }
+        // Extend last week to cover remaining days at end of month
+        if (weeks.length > 0) {
+          const last = weeks[weeks.length - 1];
+          if (last.end < lastDay) last.end = new Date(lastDay);
         }
         return weeks;
       }
