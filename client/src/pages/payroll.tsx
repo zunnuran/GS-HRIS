@@ -369,7 +369,7 @@ function printSalarySlip(record: PayrollRecordWithEmployee) {
 }
 
 const allowanceItemSchema = z.object({
-  label: z.string().min(1, "Label is required"),
+  label: z.string().default(""),
   value: z.string().default("0"),
 });
 
@@ -828,15 +828,17 @@ function PayrollFormDialog({
 
   // Parse allowance details from editRecord if present
   const parseAllowanceDetails = (record: PayrollRecordWithEmployee | null | undefined) => {
-    if (!record?.allowanceDetails) return DEFAULT_ALLOWANCES.map(a => ({ label: a.label, value: "0" }));
+    if (!record?.allowanceDetails) return [];
     try {
       const parsed = JSON.parse(record.allowanceDetails);
-      return Array.isArray(parsed) ? parsed.map((a: { label: string; value: number }) => ({ 
-        label: a.label, 
-        value: a.value.toString() 
-      })) : DEFAULT_ALLOWANCES.map(a => ({ label: a.label, value: "0" }));
+      return Array.isArray(parsed) && parsed.length > 0
+        ? parsed.map((a: { label: string; value: number }) => ({
+            label: a.label,
+            value: a.value.toString(),
+          }))
+        : [];
     } catch {
-      return DEFAULT_ALLOWANCES.map(a => ({ label: a.label, value: "0" }));
+      return [];
     }
   };
 
@@ -888,7 +890,7 @@ function PayrollFormDialog({
       leaveEncashmentDays: "0",
       advanceDeduction: "0",
       taxDeduction: "0",
-      allowanceItems: DEFAULT_ALLOWANCES.map(a => ({ label: a.label, value: "0" })),
+      allowanceItems: [],
       bonuses: "0",
       remarks: "",
       status: "draft",
@@ -949,7 +951,7 @@ function PayrollFormDialog({
         leaveEncashmentDays: "0",
         advanceDeduction: "0",
         taxDeduction: "0",
-        allowanceItems: DEFAULT_ALLOWANCES.map(a => ({ label: a.label, value: "0" })),
+        allowanceItems: [],
         bonuses: "0",
         remarks: "",
         status: "draft",
@@ -1002,12 +1004,14 @@ function PayrollFormDialog({
   const buildPayload = (data: PayrollFormValues) => {
     const calc = calculatePayroll(selectedEmployee, data);
     
-    // Convert allowance items to JSON string
+    // Convert allowance items to JSON string, filtering out blank rows
     const allowanceDetails = JSON.stringify(
-      data.allowanceItems?.map(item => ({
-        label: item.label,
-        value: parseFloat(item.value) || 0
-      })) || []
+      (data.allowanceItems ?? [])
+        .filter(item => item.label.trim() !== "")
+        .map(item => ({
+          label: item.label,
+          value: parseFloat(item.value) || 0,
+        }))
     );
     
     return {
