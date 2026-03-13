@@ -59,6 +59,7 @@ import {
   ChevronDown,
   Pencil,
   Printer,
+  FileDown,
   Upload,
   Loader2,
   XCircle,
@@ -372,6 +373,163 @@ function printSalarySlip(record: PayrollRecordWithEmployee) {
   if (printWindow) {
     printWindow.document.write(html);
     printWindow.document.close();
+  }
+}
+
+async function downloadSalarySlipPdf(record: PayrollRecordWithEmployee) {
+  const months = ["January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"];
+  const shortMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+  let allowanceItems: AllowanceItem[] = [];
+  try { allowanceItems = JSON.parse(record.allowanceDetails || "[]"); } catch { allowanceItems = []; }
+
+  const grossSalary = parseFloat(record.grossSalary) || 0;
+  const hoursDeduction = parseFloat(record.hoursDeduction || "0");
+  const advanceDeduction = parseFloat(record.advanceDeduction || "0");
+  const taxDeduction = parseFloat(record.taxDeduction || "0");
+  const bonuses = parseFloat(record.bonuses || "0");
+  const netSalary = parseFloat(record.netSalary || "0");
+  const overtimePay = parseFloat(record.overtimePay || "0");
+  const overtimeHours = parseFloat(record.overtimeHours || "0");
+  const adjustedHoursDifference = parseFloat(record.adjustedHoursDifference || "0");
+  const totalDeductions = hoursDeduction + advanceDeduction + taxDeduction;
+  const totalAllowances = parseFloat(record.allowances || "0");
+  const formatNum = (v: number) => v.toLocaleString("en-PK");
+  const salaryMonth = `${shortMonths[record.month - 1]}-${record.year.toString().slice(-2)}`;
+  const hireDate = record.employee.hireDate
+    ? new Date(record.employee.hireDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+    : "-";
+  const today = new Date();
+  const dated = today.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+
+  const paymentRows = [
+    { label: "Basic:", value: grossSalary },
+    ...allowanceItems.map(a => ({ label: `${a.label}:`, value: typeof a.value === "string" ? parseFloat(a.value) || 0 : a.value })),
+    ...(bonuses > 0 ? [{ label: "Performance Bonus:", value: bonuses }] : [{ label: "Performance Bonus:", value: 0 }]),
+    ...(overtimePay > 0 ? [{ label: "Over Time:", value: overtimePay }] : []),
+  ];
+  const deductionRows = [
+    { label: "Tax Deduction", value: taxDeduction },
+    { label: "Advance Salary", value: advanceDeduction },
+    { label: "Time Deduction", value: hoursDeduction },
+  ];
+  const maxRows = Math.max(paymentRows.length, deductionRows.length);
+
+  const tdBase = "padding:4px 8px;border:1px solid #000;font-size:10px;";
+  let tableRows = "";
+  for (let i = 0; i < maxRows; i++) {
+    const pay = paymentRows[i];
+    const ded = deductionRows[i];
+    tableRows += `<tr>
+      <td style="${tdBase}width:40%">${pay ? pay.label : ""}</td>
+      <td style="${tdBase}text-align:right;width:15%">${pay ? formatNum(pay.value) : ""}</td>
+      <td style="${tdBase}width:30%">${ded ? ded.label : ""}</td>
+      <td style="${tdBase}text-align:right;width:15%">${ded ? formatNum(ded.value) : ""}</td>
+    </tr>`;
+  }
+
+  const netInWords = numberToWords(Math.round(netSalary));
+  const bgUrl = window.location.origin + "/slip-background.jpg";
+
+  const otLabel = overtimeHours > 0 ? "OT:" : adjustedHoursDifference > 0 ? "Missing Hours:" : "";
+  const otValue = overtimeHours > 0 ? overtimeHours.toFixed(1) + " hrs" : adjustedHoursDifference > 0 ? adjustedHoursDifference.toFixed(1) + " hrs" : "";
+
+  const htd = "padding:3px 0;font-size:11px;";
+
+  const pageHtml = `
+    <div style="width:794px;min-height:1123px;position:relative;background-image:url('${bgUrl}');background-size:794px 1123px;background-repeat:no-repeat;background-position:top left;font-family:Arial,sans-serif;font-size:12px;color:#000;box-sizing:border-box;">
+      <div style="padding-top:287px;padding-left:68px;padding-right:68px;padding-bottom:170px;box-sizing:border-box;">
+        <h2 style="text-align:center;margin:0 0 4px 0;font-size:15px;letter-spacing:1px;">SALARY SLIP</h2>
+        <p style="text-align:right;margin:0 0 12px 0;font-size:10px;color:#555;">Dated: ${dated}</p>
+        <table style="border-collapse:collapse;width:100%;margin-bottom:12px;">
+          <tr>
+            <td style="${htd}width:20%"><strong>Employee Name:</strong></td>
+            <td style="${htd}width:35%">${record.employee.firstName} ${record.employee.lastName}</td>
+            <td style="${htd}width:20%"><strong>CNIC:</strong></td>
+            <td style="${htd}width:25%">${record.employee.cnic || "-"}</td>
+          </tr>
+          <tr>
+            <td style="${htd}"><strong>Designation:</strong></td>
+            <td style="${htd}">${record.employee.position || "-"}</td>
+            <td style="${htd}"><strong>Employee Code:</strong></td>
+            <td style="${htd}">${record.employee.id}</td>
+          </tr>
+          <tr>
+            <td style="${htd}"><strong>Joining Date:</strong></td>
+            <td style="${htd}">${hireDate}</td>
+            <td style="${htd}"><strong>Working Days:</strong></td>
+            <td style="${htd}">${record.workingDaysInMonth || "-"}</td>
+          </tr>
+          <tr>
+            <td style="${htd}"><strong>Salary Month:</strong></td>
+            <td style="${htd}">${salaryMonth}</td>
+            <td style="${htd}"><strong>${otLabel}</strong></td>
+            <td style="${htd}">${otValue}</td>
+          </tr>
+          <tr>
+            <td style="${htd}"><strong>Paid Leaves:</strong></td>
+            <td style="${htd}">${parseFloat(record.paidLeaves || "0")} days</td>
+            <td style="${htd}"></td>
+            <td style="${htd}"></td>
+          </tr>
+        </table>
+        <table style="border-collapse:collapse;width:100%;margin-bottom:0;">
+          <thead>
+            <tr>
+              <th style="padding:5px 8px;border:1px solid #000;text-align:left;background:#f0f0f0;width:40%;font-size:10px;">PAYMENTS</th>
+              <th style="padding:5px 8px;border:1px solid #000;text-align:right;background:#f0f0f0;width:15%;font-size:10px;">Amount</th>
+              <th style="padding:5px 8px;border:1px solid #000;text-align:left;background:#f0f0f0;width:30%;font-size:10px;">DEDUCTIONS</th>
+              <th style="padding:5px 8px;border:1px solid #000;text-align:right;background:#f0f0f0;width:15%;font-size:10px;">Amount</th>
+            </tr>
+          </thead>
+          <tbody>${tableRows}</tbody>
+        </table>
+        <table style="border-collapse:collapse;width:100%;margin-bottom:10px;">
+          <tr>
+            <td style="font-size:11px;font-weight:bold;padding:5px 8px;border:1px solid #000;width:40%">Total Gross Salary</td>
+            <td style="font-size:11px;font-weight:bold;padding:5px 8px;border:1px solid #000;text-align:right;width:15%">${formatNum(grossSalary + totalAllowances + bonuses + overtimePay)}</td>
+            <td style="font-size:11px;font-weight:bold;padding:5px 8px;border:1px solid #000;width:30%">Total Deduction</td>
+            <td style="font-size:11px;font-weight:bold;padding:5px 8px;border:1px solid #000;text-align:right;width:15%">${formatNum(totalDeductions)}</td>
+          </tr>
+          <tr>
+            <td colspan="3" style="font-size:11px;font-weight:bold;padding:5px 8px;text-align:left;border:none;"><strong>Net Pay</strong></td>
+            <td style="font-size:13px;font-weight:bold;padding:5px 8px;text-align:right;border:none;"><strong>${formatNum(netSalary)}</strong></td>
+          </tr>
+        </table>
+        <table style="border-collapse:collapse;width:100%;margin-bottom:12px;">
+          <tr>
+            <td style="padding:3px 0;font-size:10px;"><strong>In Words:</strong> ${netInWords}</td>
+          </tr>
+        </table>
+        <div style="font-size:9px;color:#555;margin-top:15px;">
+          <p style="margin:0;"><strong>Note:</strong> No stamp/signature is needed.</p>
+          <p style="margin:2px 0 0 0;">Slip is computerized and automatically generated.</p>
+        </div>
+      </div>
+    </div>`;
+
+  const container = document.createElement("div");
+  container.style.cssText = "position:fixed;left:-9999px;top:0;";
+  container.innerHTML = pageHtml;
+  document.body.appendChild(container);
+
+  try {
+    const html2pdf = (await import("html2pdf.js")).default;
+    const filename = `salary-slip-${record.employee.firstName}-${record.employee.lastName}-${months[record.month - 1]}-${record.year}.pdf`;
+    await html2pdf()
+      .set({
+        margin: 0,
+        filename,
+        image: { type: "jpeg", quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, allowTaint: true },
+        jsPDF: { unit: "px", format: [794, 1123], orientation: "portrait" },
+      })
+      .from(container.firstElementChild as HTMLElement)
+      .save();
+  } finally {
+    document.body.removeChild(container);
   }
 }
 
@@ -1820,16 +1978,28 @@ function PayrollDetailDialog({
               <FileText className="h-5 w-5" />
               Payroll Details
             </DialogTitle>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => printSalarySlip(record)}
-              className="flex items-center gap-2"
-              data-testid="button-print-detail"
-            >
-              <Printer className="h-4 w-4" />
-              Print Slip
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => printSalarySlip(record)}
+                className="flex items-center gap-2"
+                data-testid="button-print-detail"
+              >
+                <Printer className="h-4 w-4" />
+                Print Slip
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => downloadSalarySlipPdf(record)}
+                className="flex items-center gap-2"
+                data-testid="button-download-pdf-detail"
+              >
+                <FileDown className="h-4 w-4" />
+                Download PDF
+              </Button>
+            </div>
           </div>
         </DialogHeader>
         
@@ -2241,6 +2411,15 @@ export default function Payroll() {
                             data-testid={`button-print-${record.id}`}
                           >
                             <Printer className="h-4 w-4" />
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="icon"
+                            onClick={() => downloadSalarySlipPdf(record)}
+                            title="Download PDF"
+                            data-testid={`button-download-pdf-${record.id}`}
+                          >
+                            <FileDown className="h-4 w-4" />
                           </Button>
                         </div>
                       </TableCell>
