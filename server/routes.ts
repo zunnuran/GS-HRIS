@@ -286,6 +286,201 @@ export async function registerRoutes(
     }
   });
 
+  // Tahometer payroll import route
+  app.post("/api/payroll/import-tahometer", isAuthenticated, async (req, res) => {
+    try {
+      const { reportUrl, token } = req.body as { reportUrl: string; token: string };
+
+      if (!reportUrl || !token) {
+        return res.status(400).json({ message: "reportUrl and token are required" });
+      }
+
+      // Extract subdomain and report ID from the URL
+      // e.g. https://gameverse.tahometer.com/app/reports/5540
+      const urlMatch = reportUrl.match(/https?:\/\/([^.]+)\.tahometer\.com/);
+      const idMatch = reportUrl.match(/\/reports\/(\d+)/);
+
+      if (!urlMatch || !idMatch) {
+        return res.status(400).json({ message: "Invalid report URL format. Expected: https://<subdomain>.tahometer.com/app/reports/<id>" });
+      }
+
+      const subdomain = urlMatch[1];
+      const reportId = parseInt(idMatch[1]);
+      const apiUrl = `https://${subdomain}.tahometer.com/api/v2/reports/report_table`;
+
+      // Fetch from Tahometer (server-side to avoid CORS)
+      let tahometerData: any;
+      try {
+        const tahometerRes = await fetch(apiUrl, {
+          method: "POST",
+          headers: {
+            "authorization": `Bearer ${token}`,
+            "content-type": "application/json",
+            "x-subdomain": subdomain,
+            "Referer": reportUrl,
+          },
+          body: JSON.stringify({ id: reportId }),
+        });
+
+        if (!tahometerRes.ok) {
+          return res.status(tahometerRes.status).json({
+            message: `Tahometer API returned ${tahometerRes.status}: ${tahometerRes.statusText}`,
+          });
+        }
+
+        tahometerData = await tahometerRes.json();
+      } catch (fetchErr: any) {
+        return res.status(502).json({ message: `Failed to reach Tahometer: ${fetchErr.message}` });
+      }
+
+      const reports: any[] = tahometerData.reports || [];
+      const fromDate = new Date(tahometerData.dates?.from || tahometerData.report_info?.from_date);
+      const toDate = new Date(tahometerData.dates?.to || tahometerData.report_info?.to_date);
+
+      const reportMonth = fromDate.getMonth() + 1; // 1-12
+      const reportYear = fromDate.getFullYear();
+
+      // Calculate working days in the month (excluding Sundays)
+      function calcWorkingDaysInMonth(month: number, year: number): number {
+        const daysInMonth = new Date(year, month, 0).getDate();
+        let count = 0;
+        for (let d = 1; d <= daysInMonth; d++) {
+          if (new Date(year, month - 1, d).getDay() !== 0) count++;
+        }
+        return count;
+      }
+
+      // Get the Monday of the week containing a given date
+      function getWeekMondayKey(date: Date): string {
+        const d = new Date(date);
+        d.setHours(0, 0, 0, 0);
+        const day = d.getDay(); // 0=Sun
+        const diff = day === 0 ? -6 : 1 - day;
+        d.setDate(d.getDate() + diff);
+        return d.toISOString().split("T")[0];
+      }
+
+      // Count Mon-Sat days within the report range for a given week
+      function countWorkingDaysInWeek(weekMondayStr: string): number {
+        const monday = new Date(weekMondayStr + "T00:00:00");
+        let count = 0;
+        for (let i = 0; i < 6; i++) { // Mon (i=0) to Sat (i=5)
+          const d = new Date(monday);
+          d.setDate(monday.getDate() + i);
+          if (d >= fromDate && d <= toDate) count++;
+        }
+        return count;
+      }
+
+      // Convert minutes to HH:MM
+      function minutesToHHMM(minutes: number): string {
+        const h = Math.floor(minutes / 60);
+        const m = minutes % 60;
+        return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+      }
+
+      // Convert decimal hours to HH:MM
+      function hoursToHHMM(hours: number): string {
+        const h = Math.floor(hours);
+        const m = Math.round((hours - h) * 60);
+        return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+      }
+
+      const workingDaysInMonth = calcWorkingDaysInMonth(reportMonth, reportYear);
+      const results: { name: string; status: "created" | "updated" | "skipped" | "not_found"; reason?: string }[] = [];
+
+      for (const member of reports) {
+        const fullName = `${member.first_name} ${member.last_name}`;
+
+        if (!member.info || member.info.length === 0) {
+          results.push({ name: fullName, status: "skipped", reason: "No time data" });
+          continue;
+        }
+
+        // Find matching employee
+        const employee = await storage.getEmployeeByName(member.first_name, member.last_name);
+        if (!employee) {
+          results.push({ name: fullName, status: "not_found", reason: "No matching employee found" });
+          continue;
+        }
+
+        // Group info entries by week Monday
+        const weekMap = new Map<string, number>(); // weekMondayKey -> total minutes
+        for (const entry of member.info) {
+          const entryDate = new Date(entry.date);
+          const weekKey = getWeekMondayKey(entryDate);
+          weekMap.set(weekKey, (weekMap.get(weekKey) || 0) + (entry.online || 0));
+        }
+
+        // Sort weeks chronologically and assign to week1..week5
+        const sortedWeeks = Array.from(weekMap.entries()).sort(([a], [b]) => a.localeCompare(b));
+
+        const requiredHoursPerDay = parseFloat(employee.requiredHoursPerDay) || 8;
+
+        const weekActuals: string[] = [];
+        const weekExpecteds: string[] = [];
+        for (const [weekKey, totalMinutes] of sortedWeeks.slice(0, 5)) {
+          weekActuals.push(minutesToHHMM(totalMinutes));
+          const workingDaysInWeek = countWorkingDaysInWeek(weekKey);
+          weekExpecteds.push(hoursToHHMM(workingDaysInWeek * requiredHoursPerDay));
+        }
+
+        // Pad to 5 weeks
+        while (weekActuals.length < 5) weekActuals.push("00:00");
+        while (weekExpecteds.length < 5) weekExpecteds.push("00:00");
+
+        const payrollData = {
+          employeeId: employee.id,
+          month: reportMonth,
+          year: reportYear,
+          workingDaysInMonth,
+          grossSalary: employee.grossSalary,
+          week1Expected: weekExpecteds[0],
+          week1Actual: weekActuals[0],
+          week2Expected: weekExpecteds[1],
+          week2Actual: weekActuals[1],
+          week3Expected: weekExpecteds[2],
+          week3Actual: weekActuals[2],
+          week4Expected: weekExpecteds[3],
+          week4Actual: weekActuals[3],
+          week5Expected: weekExpecteds[4],
+          week5Actual: weekActuals[4],
+          status: "draft",
+        };
+
+        // Check for existing record
+        const existing = await storage.findPayrollByEmployeeMonthYear(employee.id, reportMonth, reportYear);
+
+        if (existing) {
+          if (existing.status !== "draft") {
+            results.push({ name: fullName, status: "skipped", reason: `Payroll is ${existing.status}, not overwriting` });
+            continue;
+          }
+          await storage.updatePayrollRecord(existing.id, payrollData);
+          results.push({ name: fullName, status: "updated" });
+        } else {
+          await storage.createPayrollRecord(payrollData as any);
+          results.push({ name: fullName, status: "created" });
+        }
+      }
+
+      res.json({
+        month: reportMonth,
+        year: reportYear,
+        results,
+        summary: {
+          created: results.filter(r => r.status === "created").length,
+          updated: results.filter(r => r.status === "updated").length,
+          skipped: results.filter(r => r.status === "skipped").length,
+          not_found: results.filter(r => r.status === "not_found").length,
+        },
+      });
+    } catch (error) {
+      console.error("Error importing from Tahometer:", error);
+      res.status(500).json({ message: "Failed to import payroll from Tahometer" });
+    }
+  });
+
   // ==================== ASSET MANAGEMENT ROUTES ====================
 
   // Manufacturer routes

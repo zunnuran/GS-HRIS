@@ -1,0 +1,258 @@
+{
+    "type": "user_worktable",
+    "reports": [
+        {
+            "id": 73620,
+            "first_name": "Saad",
+            "last_name": "Abdullah",
+            "total": 5193,
+            "info": [
+                {
+                    "date": "2026-02-02T00:00:00",
+                    "online": 239,
+                    "project_id": 56677
+                },
+                {
+                    "date": "2026-02-03T00:00:00",
+                    "online": 215,
+                    "project_id": 56677
+                },
+                {
+                    "date": "2026-02-04T00:00:00",
+                    "online": 157,
+                    "project_id": 56677
+                },
+                {
+                    "date": "2026-02-05T00:00:00",
+                    "online": 288,
+                    "project_id": 56677
+                },
+                {
+                    "date": "2026-02-06T00:00:00",
+                    "online": 216,
+                    "project_id": 56677
+                },
+                {
+                    "date": "2026-02-09T00:00:00",
+                    "online": 275,
+                    "project_id": 56677
+                },
+                {
+                    "date": "2026-02-11T00:00:00",
+                    "online": 352,
+                    "project_id": 56677
+                },
+                {
+                    "date": "2026-02-12T00:00:00",
+                    "online": 495,
+                    "project_id": 56677
+                },
+                {
+                    "date": "2026-02-13T00:00:00",
+                    "online": 210,
+                    "project_id": 56677
+                },
+                {
+                    "date": "2026-02-14T00:00:00",
+                    "online": 300,
+                    "project_id": 56677
+                },
+                {
+                    "date": "2026-02-16T00:00:00",
+                    "online": 327,
+                    "project_id": 56677
+                },
+                {
+                    "date": "2026-02-17T00:00:00",
+                    "online": 282,
+                    "project_id": 56677
+                },
+                {
+                    "date": "2026-02-18T00:00:00",
+                    "online": 277,
+                    "project_id": 56677
+                },
+                {
+                    "date": "2026-02-19T00:00:00",
+                    "online": 188,
+                    "project_id": 56677
+                },
+                {
+                    "date": "2026-02-20T00:00:00",
+                    "online": 166,
+                    "project_id": 56677
+                },
+                {
+                    "date": "2026-02-21T00:00:00",
+                    "online": 181,
+                    "project_id": 56677
+                },
+                {
+                    "date": "2026-02-23T00:00:00",
+                    "online": 201,
+                    "project_id": 56677
+                },
+                {
+                    "date": "2026-02-24T00:00:00",
+                    "online": 212,
+                    "project_id": 56677
+                },
+                {
+                    "date": "2026-02-25T00:00:00",
+                    "online": 196,
+                    "project_id": 56677
+                },
+                {
+                    "date": "2026-02-26T00:00:00",
+                    "online": 178,
+                    "project_id": 56677
+                },
+                {
+                    "date": "2026-02-28T00:00:00",
+                    "online": 238,
+                    "project_id": 56677
+                }
+            ]
+        },
+        {
+            "id": 54744,
+            "first_name": "Bilal",
+            "last_name": "Ahmad",
+            "total": 8147,
+            "info": [
+                {
+                    "date": "2026-02-02T00:00:00",
+                    "online": 442,
+                    "project_id": 56677
+                },
+                {
+                    "date": "2026-02-03T00:00:00",
+                    "online": 379,
+                    "project_id": 56677
+                },
+                {
+                    "date": "2026-02-05T00:00:00",
+                    "online": 530,
+                    "project_id": 56677
+                },
+                {
+                    "date": "2026-02-06T00:00:00",
+                    "online": 476,
+                    "project_id": 56677
+                },
+                {
+                    "date": "2026-02-09T00:00:00",
+                    "online": 338,
+                    "project_id": 56677
+                },
+                {
+                    "date": "2026-02-10T00:00:00",
+                    "online": 422,
+                    "project_id": 56677
+                },
+                {
+                    "date": "2026-02-11T00:00:00",
+                    "online": 429,
+                    "project_id": 56677
+                },
+                {
+                    "date": "2026-02-12T00:00:00",
+                    "online": 427,
+                    "project_id": 56677
+                },
+                {
+                    "date": "2026-02-14T00:00:00",
+                    "online": 450,
+                    "project_id": 56677
+                },
+                {
+                    "date": "2026-02-16T00:00:00",
+                    "online": 421,
+                    "project_id": 56677
+                },
+                {
+                    "date": "2026-02-17T00:00:00",
+                    "online": 435,
+                    "project_id": 56677
+                },
+                {
+                    "date": "2026-02-18T00:00:00",
+                    "online": 410,
+                    "project_id": 56677
+                },
+                {
+                    "date": "2026-02-19T00:00:00",
+                    "online": 358,
+                    "project_id": 56677
+                },
+                {
+                    "date": "2026-02-20T00:00:00",
+                    "online": 418,
+                    "project_id": 56677
+                },
+                {
+                    "date": "2026-02-23T00:00:00",
+                    "online": 373,
+                    "project_id": 56677
+                },
+                {
+                    "date": "2026-02-24T00:00:00",
+                    "online": 424,
+                    "project_id": 56677
+                },
+                {
+                    "date": "2026-02-25T00:00:00",
+                    "online": 324,
+                    "project_id": 56677
+                },
+                {
+                    "date": "2026-02-26T00:00:00",
+                    "online": 339,
+                    "project_id": 56677
+                },
+                {
+                    "date": "2026-02-27T00:00:00",
+                    "online": 300,
+                    "project_id": 56677
+                },
+                {
+                    "date": "2026-02-28T00:00:00",
+                    "online": 452,
+                    "project_id": 56677
+                }
+            ]
+        },
+        {
+            "id": 61229,
+            "first_name": "Mathew",
+            "last_name": "compiler",
+            "total": 0,
+            "info": []
+        }
+    ],
+    "dates": {
+        "from": "2026-02-01T00:00:00",
+        "to": "2026-02-28T00:00:00"
+    },
+    "report_info": {
+        "id": 5540,
+        "name": "Monthly Report",
+        "user_id": 72602,
+        "report_user_ids": "[48556,48837,48838,48887,49114,53298,53299,53300,54046,54744,56864,57460,58993,61229,61744,70025,72602,72603,72778,72835,73040,73075,73096,73097,73134,73280,73339,73460,73611,73620]",
+        "report_project_ids": "[56677,57313,80209,57085,80223,76393,57314,57084,79980]",
+        "include_archive_users": false,
+        "include_archive_projects": false,
+        "report_type": 2,
+        "from_date": "2026-02-01T00:00:00.000Z",
+        "to_date": "2026-02-28T00:00:00.000Z",
+        "notification_type": 2,
+        "format": 0,
+        "created_at": "2026-03-02T08:55:15.000Z",
+        "updated_at": "2026-03-02T08:55:47.000Z",
+        "time_zone": "Asia/Karachi",
+        "is_scheduled": 0,
+        "send_if_zero_activity": false,
+        "is_detailed": false,
+        "is_users_tz": true
+    }
+}

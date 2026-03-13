@@ -63,9 +63,11 @@ export interface IStorage {
   // Payroll operations
   getPayrollRecords(): Promise<PayrollRecordWithEmployee[]>;
   getPayrollRecord(id: number): Promise<PayrollRecordWithEmployee | undefined>;
+  findPayrollByEmployeeMonthYear(employeeId: number, month: number, year: number): Promise<PayrollRecord | undefined>;
   createPayrollRecord(record: InsertPayrollRecord): Promise<PayrollRecord>;
   updatePayrollRecord(id: number, record: Partial<InsertPayrollRecord>): Promise<PayrollRecord | undefined>;
   deletePayrollRecord(id: number): Promise<boolean>;
+  getEmployeeByName(firstName: string, lastName: string): Promise<Employee | undefined>;
 
   // Dashboard stats
   getDashboardStats(): Promise<{
@@ -315,6 +317,33 @@ export class DatabaseStorage implements IStorage {
     if (!employee) return undefined;
 
     return { ...record, employee };
+  }
+
+  async findPayrollByEmployeeMonthYear(employeeId: number, month: number, year: number): Promise<PayrollRecord | undefined> {
+    const [record] = await db
+      .select()
+      .from(payrollRecords)
+      .where(
+        and(
+          eq(payrollRecords.employeeId, employeeId),
+          eq(payrollRecords.month, month),
+          eq(payrollRecords.year, year)
+        )
+      );
+    return record || undefined;
+  }
+
+  async getEmployeeByName(firstName: string, lastName: string): Promise<Employee | undefined> {
+    const [employee] = await db
+      .select()
+      .from(employees)
+      .where(
+        and(
+          sql`lower(${employees.firstName}) = lower(${firstName})`,
+          sql`lower(${employees.lastName}) = lower(${lastName})`
+        )
+      );
+    return employee || undefined;
   }
 
   async createPayrollRecord(record: InsertPayrollRecord): Promise<PayrollRecord> {

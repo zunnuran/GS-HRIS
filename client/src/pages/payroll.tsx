@@ -58,7 +58,11 @@ import {
   ChevronUp,
   ChevronDown,
   Pencil,
-  Printer
+  Printer,
+  Upload,
+  Loader2,
+  XCircle,
+  Info
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -1901,6 +1905,16 @@ export default function Payroll() {
   const [yearFilter, setYearFilter] = useState<string>(new Date().getFullYear().toString());
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
+  const [importOpen, setImportOpen] = useState(false);
+  const [importUrl, setImportUrl] = useState("");
+  const [importToken, setImportToken] = useState("");
+  const [importLoading, setImportLoading] = useState(false);
+  const [importResults, setImportResults] = useState<null | {
+    month: number; year: number;
+    summary: { created: number; updated: number; skipped: number; not_found: number };
+    results: { name: string; status: string; reason?: string }[];
+  }>(null);
+
   const { data: payrollRecords, isLoading } = useQuery<PayrollRecordWithEmployee[]>({
     queryKey: ["/api/payroll"],
   });
@@ -1908,6 +1922,38 @@ export default function Payroll() {
   const { data: employees = [] } = useQuery<Employee[]>({
     queryKey: ["/api/employees"],
   });
+
+  const { toast } = useToast();
+
+  const handleImport = async () => {
+    if (!importUrl.trim() || !importToken.trim()) {
+      toast({ title: "Missing fields", description: "Please enter both the Report URL and Token.", variant: "destructive" });
+      return;
+    }
+    setImportLoading(true);
+    setImportResults(null);
+    try {
+      const res = await apiRequest("POST", "/api/payroll/import-tahometer", {
+        reportUrl: importUrl.trim(),
+        token: importToken.trim(),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({ title: "Import failed", description: data.message || "Unknown error", variant: "destructive" });
+      } else {
+        setImportResults(data);
+        queryClient.invalidateQueries({ queryKey: ["/api/payroll"] });
+        toast({
+          title: "Import complete",
+          description: `Created: ${data.summary.created}, Updated: ${data.summary.updated}, Skipped: ${data.summary.skipped}, Not found: ${data.summary.not_found}`,
+        });
+      }
+    } catch (err: any) {
+      toast({ title: "Import failed", description: err.message || "Network error", variant: "destructive" });
+    } finally {
+      setImportLoading(false);
+    }
+  };
 
   const filteredRecords = payrollRecords?.filter((record) => {
     if (monthFilter !== "all" && record.month.toString() !== monthFilter) return false;
@@ -1957,10 +2003,16 @@ export default function Payroll() {
             Manage employee payroll and salary calculations
           </p>
         </div>
-        <Button onClick={() => setDialogOpen(true)} data-testid="button-create-payroll">
-          <Plus className="h-4 w-4 mr-2" />
-          Create Payroll
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => { setImportResults(null); setImportOpen(true); }}>
+            <Upload className="h-4 w-4 mr-2" />
+            Import Payroll
+          </Button>
+          <Button onClick={() => setDialogOpen(true)} data-testid="button-create-payroll">
+            <Plus className="h-4 w-4 mr-2" />
+            Create Payroll
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -2129,6 +2181,90 @@ export default function Payroll() {
         onOpenChange={(open) => !open && setDetailRecord(null)}
         record={detailRecord}
       />
+
+      {/* Tahometer Import Dialog */}
+      <Dialog open={importOpen} onOpenChange={(open) => { setImportOpen(open); if (!open) setImportResults(null); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Upload className="h-5 w-5" />
+              Import Payroll from Tahometer
+            </DialogTitle>
+          </DialogHeader>
+
+          {!importResults ? (
+            <div className="space-y-4 pt-2">
+              <div className="rounded-md bg-muted/50 p-3 text-sm text-muted-foreground flex gap-2">
+                <Info className="h-4 w-4 mt-0.5 shrink-0" />
+                <span>Enter the report page URL and your API token. Time data will be imported per employee per week and matched by first &amp; last name.</span>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Report URL</label>
+                <Input
+                  placeholder="https://gameverse.tahometer.com/app/reports/5540"
+                  value={importUrl}
+                  onChange={(e) => setImportUrl(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">The full URL of the report page (used as Referer header)</p>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Token</label>
+                <Input
+                  type="password"
+                  placeholder="Your Bearer token"
+                  value={importToken}
+                  onChange={(e) => setImportToken(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">Used as the Bearer authorization token</p>
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={() => setImportOpen(false)}>Cancel</Button>
+                <Button onClick={handleImport} disabled={importLoading}>
+                  {importLoading ? (
+                    <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Importing...</>
+                  ) : (
+                    <><Upload className="h-4 w-4 mr-2" />Import</>
+                  )}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4 pt-2">
+              <div className="grid grid-cols-4 gap-2 text-center">
+                {[
+                  { label: "Created", value: importResults.summary.created, color: "text-green-500" },
+                  { label: "Updated", value: importResults.summary.updated, color: "text-blue-500" },
+                  { label: "Skipped", value: importResults.summary.skipped, color: "text-yellow-500" },
+                  { label: "Not Found", value: importResults.summary.not_found, color: "text-red-500" },
+                ].map((s) => (
+                  <div key={s.label} className="rounded-md border p-2">
+                    <div className={`text-2xl font-bold ${s.color}`}>{s.value}</div>
+                    <div className="text-xs text-muted-foreground">{s.label}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="max-h-64 overflow-y-auto rounded-md border divide-y">
+                {importResults.results.map((r, i) => (
+                  <div key={i} className="flex items-center justify-between px-3 py-2 text-sm">
+                    <span className="font-medium">{r.name}</span>
+                    <div className="flex items-center gap-2">
+                      {r.status === "created" && <Badge variant="default" className="text-xs bg-green-600">Created</Badge>}
+                      {r.status === "updated" && <Badge variant="default" className="text-xs bg-blue-600">Updated</Badge>}
+                      {r.status === "skipped" && <Badge variant="secondary" className="text-xs">Skipped</Badge>}
+                      {r.status === "not_found" && <Badge variant="destructive" className="text-xs">Not Found</Badge>}
+                      {r.reason && <span className="text-xs text-muted-foreground">({r.reason})</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setImportResults(null)}>Import Again</Button>
+                <Button onClick={() => setImportOpen(false)}>Done</Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
