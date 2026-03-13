@@ -256,6 +256,13 @@ export async function registerRoutes(
   app.put("/api/payroll/:id", isAuthenticated, async (req, res) => {
     try {
       const id = parseInt(req.params.id);
+      const existing = await storage.getPayrollRecord(id);
+      if (!existing) {
+        return res.status(404).json({ message: "Payroll record not found" });
+      }
+      if (existing.status === "paid") {
+        return res.status(403).json({ message: "Paid payroll records cannot be edited" });
+      }
       const data = insertPayrollRecordSchema.partial().parse(req.body);
       const record = await storage.updatePayrollRecord(id, data);
       if (!record) {

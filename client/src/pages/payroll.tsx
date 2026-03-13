@@ -1135,7 +1135,7 @@ function PayrollFormDialog({
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Employee</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <Select onValueChange={field.onChange} value={field.value}>
                             <FormControl>
                               <SelectTrigger data-testid="select-payroll-employee">
                                 <SelectValue placeholder="Select employee" />
@@ -1160,7 +1160,7 @@ function PayrollFormDialog({
                         render={({ field }) => (
                           <FormItem>
                             <FormLabel>Month</FormLabel>
-                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <Select onValueChange={field.onChange} value={field.value}>
                               <FormControl>
                                 <SelectTrigger data-testid="select-payroll-month">
                                   <SelectValue placeholder="Select month" />
@@ -1650,7 +1650,7 @@ function PayrollFormDialog({
                           render={({ field }) => (
                             <FormItem>
                               <FormLabel>Status</FormLabel>
-                              <Select onValueChange={field.onChange} defaultValue={field.value}>
+                              <Select onValueChange={field.onChange} value={field.value}>
                                 <FormControl>
                                   <SelectTrigger data-testid="select-payroll-status">
                                     <SelectValue placeholder="Select status" />
@@ -2131,6 +2131,8 @@ export default function Payroll() {
                               setEditRecord(record);
                               setDialogOpen(true);
                             }}
+                            disabled={record.status === "paid"}
+                            title={record.status === "paid" ? "Paid records cannot be edited" : undefined}
                             data-testid={`button-edit-${record.id}`}
                           >
                             <Pencil className="h-4 w-4" />
