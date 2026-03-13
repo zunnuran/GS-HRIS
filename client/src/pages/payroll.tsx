@@ -368,6 +368,55 @@ function printSalarySlip(record: PayrollRecordWithEmployee) {
   }
 }
 
+// ── Import dialog helpers ─────────────────────────────────────────────────────
+
+function getMonthWeeksInfo(month: number, year: number) {
+  const weeks: { start: Date; end: Date; workingDays: number }[] = [];
+  const lastDay = new Date(year, month, 0); // last day of month
+  let current = new Date(year, month - 1, 1);
+  while (current <= lastDay && weeks.length < 5) {
+    const start = new Date(current);
+    let end = new Date(current);
+    while (end.getDay() !== 6 && end.getTime() < lastDay.getTime()) {
+      end = new Date(end.getFullYear(), end.getMonth(), end.getDate() + 1);
+    }
+    let workingDays = 0;
+    const d = new Date(start);
+    while (d <= end) {
+      if (d.getDay() !== 0) workingDays++;
+      d.setDate(d.getDate() + 1);
+    }
+    weeks.push({ start: new Date(start), end: new Date(end), workingDays });
+    current = new Date(end.getFullYear(), end.getMonth(), end.getDate() + 2);
+  }
+  return weeks;
+}
+
+function formatWeekRange(start: Date, end: Date): string {
+  const mo = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  if (start.getMonth() === end.getMonth()) {
+    return `${mo[start.getMonth()]} ${start.getDate()} – ${end.getDate()}`;
+  }
+  return `${mo[start.getMonth()]} ${start.getDate()} – ${mo[end.getMonth()]} ${end.getDate()}`;
+}
+
+function numToHHMM(hours: number): string {
+  const h = Math.floor(hours);
+  const m = Math.round((hours - h) * 60);
+  return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+}
+
+function calcMonthWorkingDays(month: number, year: number): number {
+  const days = new Date(year, month, 0).getDate();
+  let count = 0;
+  for (let d = 1; d <= days; d++) {
+    if (new Date(year, month - 1, d).getDay() !== 0) count++;
+  }
+  return count;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 const allowanceItemSchema = z.object({
   label: z.string().default(""),
   value: z.string().default("0"),
@@ -1918,6 +1967,30 @@ export default function Payroll() {
     results: { name: string; status: string; reason?: string }[];
   }>(null);
 
+  const prevMonth = new Date().getMonth() === 0 ? 12 : new Date().getMonth();
+  const prevYear = new Date().getMonth() === 0 ? new Date().getFullYear() - 1 : new Date().getFullYear();
+  const [importMonth, setImportMonth] = useState(String(prevMonth));
+  const [importYear, setImportYear] = useState(String(prevYear));
+  const [importWorkingDays, setImportWorkingDays] = useState(() => String(calcMonthWorkingDays(prevMonth, prevYear)));
+  const [importWeekExpecteds, setImportWeekExpecteds] = useState<string[]>(() => {
+    const weeks = getMonthWeeksInfo(prevMonth, prevYear);
+    const arr = weeks.map(w => numToHHMM(w.workingDays * 8));
+    while (arr.length < 5) arr.push("00:00");
+    return arr;
+  });
+
+  // Recompute when month/year changes
+  useEffect(() => {
+    const m = parseInt(importMonth);
+    const y = parseInt(importYear);
+    if (!m || !y) return;
+    setImportWorkingDays(String(calcMonthWorkingDays(m, y)));
+    const weeks = getMonthWeeksInfo(m, y);
+    const arr = weeks.map(w => numToHHMM(w.workingDays * 8));
+    while (arr.length < 5) arr.push("00:00");
+    setImportWeekExpecteds(arr);
+  }, [importMonth, importYear]);
+
   const { data: payrollRecords, isLoading } = useQuery<PayrollRecordWithEmployee[]>({
     queryKey: ["/api/payroll"],
   });
@@ -1938,6 +2011,8 @@ export default function Payroll() {
     try {
       const res = await apiRequest("POST", "/api/payroll/import-tahometer", {
         reportUrl: importUrl.trim(),
+        workingDays: parseInt(importWorkingDays) || 0,
+        weekExpecteds: importWeekExpecteds,
       });
       const data = await res.json();
       if (!res.ok) {
@@ -2188,7 +2263,7 @@ export default function Payroll() {
 
       {/* Tahometer Import Dialog */}
       <Dialog open={importOpen} onOpenChange={(open) => { setImportOpen(open); if (!open) setImportResults(null); }}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Upload className="h-5 w-5" />
@@ -2200,9 +2275,11 @@ export default function Payroll() {
             <div className="space-y-4 pt-2">
               <div className="rounded-md bg-muted/50 p-3 text-sm text-muted-foreground flex gap-2">
                 <Info className="h-4 w-4 mt-0.5 shrink-0" />
-                <span>Enter the report page URL. Time data will be imported per employee per week and matched by first &amp; last name. The API token is read from Settings.</span>
+                <span>Enter the report URL and configure working days and expected hours per week. The API token is read from Settings.</span>
               </div>
-              <div className="space-y-2">
+
+              {/* Report URL */}
+              <div className="space-y-1.5">
                 <label className="text-sm font-medium">Report URL</label>
                 <Input
                   placeholder="https://gameverse.tahometer.com/app/reports/5540"
@@ -2210,9 +2287,108 @@ export default function Payroll() {
                   onChange={(e) => setImportUrl(e.target.value)}
                   data-testid="input-import-url"
                 />
-                <p className="text-xs text-muted-foreground">The full URL of the report page</p>
               </div>
-              <div className="flex justify-end gap-2 pt-2">
+
+              {/* Month / Year */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Month</label>
+                  <select
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    value={importMonth}
+                    onChange={(e) => setImportMonth(e.target.value)}
+                    data-testid="select-import-month"
+                  >
+                    {["January","February","March","April","May","June","July","August","September","October","November","December"].map((m, i) => (
+                      <option key={i+1} value={String(i+1)}>{m}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Year</label>
+                  <select
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    value={importYear}
+                    onChange={(e) => setImportYear(e.target.value)}
+                    data-testid="select-import-year"
+                  >
+                    {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i).map(y => (
+                      <option key={y} value={String(y)}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Working Days */}
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Total Working Days</label>
+                <Input
+                  type="number"
+                  min="1"
+                  max="31"
+                  value={importWorkingDays}
+                  onChange={(e) => setImportWorkingDays(e.target.value)}
+                  className="w-32"
+                  data-testid="input-import-working-days"
+                />
+                <p className="text-xs text-muted-foreground">Working days in the month (excluding Sundays)</p>
+              </div>
+
+              {/* Week expected hours */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Expected Hours per Week</label>
+                <div className="rounded-md border overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-muted/50 border-b">
+                        <th className="text-left px-3 py-2 font-medium text-muted-foreground">Week</th>
+                        <th className="text-left px-3 py-2 font-medium text-muted-foreground">Date Range</th>
+                        <th className="text-center px-3 py-2 font-medium text-muted-foreground">Work Days</th>
+                        <th className="text-left px-3 py-2 font-medium text-muted-foreground">Expected (HH:MM)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {getMonthWeeksInfo(parseInt(importMonth), parseInt(importYear)).map((week, i) => (
+                        <tr key={i} className={week.workingDays === 0 ? "opacity-50" : ""}>
+                          <td className="px-3 py-2 font-medium">Week {i + 1}</td>
+                          <td className="px-3 py-2 text-muted-foreground">{formatWeekRange(week.start, week.end)}</td>
+                          <td className="px-3 py-2 text-center text-muted-foreground">{week.workingDays}</td>
+                          <td className="px-3 py-2">
+                            <Input
+                              className="h-7 w-24 font-mono text-xs"
+                              value={importWeekExpecteds[i] ?? "00:00"}
+                              onChange={(e) => {
+                                const updated = [...importWeekExpecteds];
+                                updated[i] = e.target.value;
+                                setImportWeekExpecteds(updated);
+                              }}
+                              placeholder="HH:MM"
+                              data-testid={`input-import-week${i+1}-expected`}
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                      {/* Pad remaining rows to 5 */}
+                      {Array.from({ length: Math.max(0, 5 - getMonthWeeksInfo(parseInt(importMonth), parseInt(importYear)).length) }, (_, i) => {
+                        const idx = getMonthWeeksInfo(parseInt(importMonth), parseInt(importYear)).length + i;
+                        return (
+                          <tr key={`pad-${i}`} className="opacity-30">
+                            <td className="px-3 py-2 font-medium">Week {idx + 1}</td>
+                            <td className="px-3 py-2 text-muted-foreground">—</td>
+                            <td className="px-3 py-2 text-center text-muted-foreground">0</td>
+                            <td className="px-3 py-2">
+                              <Input className="h-7 w-24 font-mono text-xs" value="00:00" readOnly />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="text-xs text-muted-foreground">Auto-calculated based on working days × 8 h/day. Edit as needed.</p>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-1">
                 <Button variant="outline" onClick={() => setImportOpen(false)}>Cancel</Button>
                 <Button onClick={handleImport} disabled={importLoading}>
                   {importLoading ? (

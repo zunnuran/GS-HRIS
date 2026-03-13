@@ -324,7 +324,8 @@ export async function registerRoutes(
   // Tahometer payroll import route
   app.post("/api/payroll/import-tahometer", isAuthenticated, async (req, res) => {
     try {
-      const { reportUrl } = req.body as { reportUrl: string };
+      const { reportUrl, workingDays: userWorkingDays, weekExpecteds: userWeekExpecteds } =
+        req.body as { reportUrl: string; workingDays?: number; weekExpecteds?: string[] };
 
       if (!reportUrl) {
         return res.status(400).json({ message: "reportUrl is required" });
@@ -375,41 +376,25 @@ export async function registerRoutes(
 
       const reports: any[] = tahometerData.reports || [];
       const fromDate = new Date(tahometerData.dates?.from || tahometerData.report_info?.from_date);
-      const toDate = new Date(tahometerData.dates?.to || tahometerData.report_info?.to_date);
 
       const reportMonth = fromDate.getMonth() + 1; // 1-12
       const reportYear = fromDate.getFullYear();
 
-      // Calculate working days in the month (excluding Sundays)
-      function calcWorkingDaysInMonth(month: number, year: number): number {
-        const daysInMonth = new Date(year, month, 0).getDate();
-        let count = 0;
-        for (let d = 1; d <= daysInMonth; d++) {
-          if (new Date(year, month - 1, d).getDay() !== 0) count++;
+      // Build week boundaries for the month: week 1 always starts on the 1st
+      function getMonthWeekBoundaries(month: number, year: number): { start: Date; end: Date }[] {
+        const weeks: { start: Date; end: Date }[] = [];
+        const lastDay = new Date(year, month, 0);
+        let current = new Date(year, month - 1, 1);
+        while (current <= lastDay && weeks.length < 5) {
+          const start = new Date(current);
+          let end = new Date(current);
+          while (end.getDay() !== 6 && end.getTime() < lastDay.getTime()) {
+            end = new Date(end.getFullYear(), end.getMonth(), end.getDate() + 1);
+          }
+          weeks.push({ start: new Date(start), end: new Date(end) });
+          current = new Date(end.getFullYear(), end.getMonth(), end.getDate() + 2);
         }
-        return count;
-      }
-
-      // Get the Monday of the week containing a given date
-      function getWeekMondayKey(date: Date): string {
-        const d = new Date(date);
-        d.setHours(0, 0, 0, 0);
-        const day = d.getDay(); // 0=Sun
-        const diff = day === 0 ? -6 : 1 - day;
-        d.setDate(d.getDate() + diff);
-        return d.toISOString().split("T")[0];
-      }
-
-      // Count Mon-Sat days within the report range for a given week
-      function countWorkingDaysInWeek(weekMondayStr: string): number {
-        const monday = new Date(weekMondayStr + "T00:00:00");
-        let count = 0;
-        for (let i = 0; i < 6; i++) { // Mon (i=0) to Sat (i=5)
-          const d = new Date(monday);
-          d.setDate(monday.getDate() + i);
-          if (d >= fromDate && d <= toDate) count++;
-        }
-        return count;
+        return weeks;
       }
 
       // Convert minutes to HH:MM
@@ -419,14 +404,36 @@ export async function registerRoutes(
         return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
       }
 
-      // Convert decimal hours to HH:MM
-      function hoursToHHMM(hours: number): string {
-        const h = Math.floor(hours);
-        const m = Math.round((hours - h) * 60);
-        return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+      const weekBoundaries = getMonthWeekBoundaries(reportMonth, reportYear);
+
+      // Get week index (0-4) for a given date based on month boundaries
+      function getWeekIndex(date: Date): number {
+        const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+        for (let i = 0; i < weekBoundaries.length; i++) {
+          if (d >= weekBoundaries[i].start && d <= weekBoundaries[i].end) return i;
+        }
+        return -1;
       }
 
-      const workingDaysInMonth = calcWorkingDaysInMonth(reportMonth, reportYear);
+      // Use user-supplied values or compute defaults
+      function calcWorkingDaysInMonth(month: number, year: number): number {
+        const daysInMonth = new Date(year, month, 0).getDate();
+        let count = 0;
+        for (let d = 1; d <= daysInMonth; d++) {
+          if (new Date(year, month - 1, d).getDay() !== 0) count++;
+        }
+        return count;
+      }
+
+      const workingDaysInMonth = typeof userWorkingDays === "number" && userWorkingDays > 0
+        ? userWorkingDays
+        : calcWorkingDaysInMonth(reportMonth, reportYear);
+
+      // Normalize user-provided expected hours (must be 5 items)
+      const expectedHoursForWeeks: string[] = Array.from({ length: 5 }, (_, i) =>
+        userWeekExpecteds?.[i] ?? "00:00"
+      );
+
       const results: { name: string; status: "created" | "updated" | "skipped" | "not_found"; reason?: string }[] = [];
 
       for (const member of reports) {
@@ -444,30 +451,17 @@ export async function registerRoutes(
           continue;
         }
 
-        // Group info entries by week Monday
-        const weekMap = new Map<string, number>(); // weekMondayKey -> total minutes
+        // Accumulate minutes per week slot (0-4)
+        const weekMinutes: number[] = [0, 0, 0, 0, 0];
         for (const entry of member.info) {
           const entryDate = new Date(entry.date);
-          const weekKey = getWeekMondayKey(entryDate);
-          weekMap.set(weekKey, (weekMap.get(weekKey) || 0) + (entry.online || 0));
+          const weekIdx = getWeekIndex(entryDate);
+          if (weekIdx >= 0 && weekIdx < 5) {
+            weekMinutes[weekIdx] += entry.online || 0;
+          }
         }
 
-        // Sort weeks chronologically and assign to week1..week5
-        const sortedWeeks = Array.from(weekMap.entries()).sort(([a], [b]) => a.localeCompare(b));
-
-        const requiredHoursPerDay = parseFloat(employee.requiredHoursPerDay) || 8;
-
-        const weekActuals: string[] = [];
-        const weekExpecteds: string[] = [];
-        for (const [weekKey, totalMinutes] of sortedWeeks.slice(0, 5)) {
-          weekActuals.push(minutesToHHMM(totalMinutes));
-          const workingDaysInWeek = countWorkingDaysInWeek(weekKey);
-          weekExpecteds.push(hoursToHHMM(workingDaysInWeek * requiredHoursPerDay));
-        }
-
-        // Pad to 5 weeks
-        while (weekActuals.length < 5) weekActuals.push("00:00");
-        while (weekExpecteds.length < 5) weekExpecteds.push("00:00");
+        const weekActuals = weekMinutes.map(min => minutesToHHMM(min));
 
         const payrollData = {
           employeeId: employee.id,
@@ -475,15 +469,15 @@ export async function registerRoutes(
           year: reportYear,
           workingDaysInMonth,
           grossSalary: employee.grossSalary,
-          week1Expected: weekExpecteds[0],
+          week1Expected: expectedHoursForWeeks[0],
           week1Actual: weekActuals[0],
-          week2Expected: weekExpecteds[1],
+          week2Expected: expectedHoursForWeeks[1],
           week2Actual: weekActuals[1],
-          week3Expected: weekExpecteds[2],
+          week3Expected: expectedHoursForWeeks[2],
           week3Actual: weekActuals[2],
-          week4Expected: weekExpecteds[3],
+          week4Expected: expectedHoursForWeeks[3],
           week4Actual: weekActuals[3],
-          week5Expected: weekExpecteds[4],
+          week5Expected: expectedHoursForWeeks[4],
           week5Actual: weekActuals[4],
           status: "draft",
         };
