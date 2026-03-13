@@ -1,9 +1,17 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { 
-  Users, 
-  Calculator, 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Users,
+  Calculator,
   TrendingUp,
   Building2,
   Clock,
@@ -13,26 +21,33 @@ import {
   ClipboardList,
   CheckCircle,
 } from "lucide-react";
-import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
   ResponsiveContainer,
   PieChart,
   Pie,
-  Cell
+  Cell,
 } from "recharts";
+
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
 
 interface DashboardStats {
   totalEmployees: number;
   activeEmployees: number;
   totalDepartments: number;
   pendingPayroll: number;
-  thisMonthPayroll: number;
-  lastMonthPayroll: number;
+  selectedMonthPayroll: number;
+  prevMonthPayroll: number;
+  selectedMonth: number;
+  selectedYear: number;
 }
 
 interface AssetDashboardStats {
@@ -62,18 +77,18 @@ const CHART_COLORS = [
   "hsl(27, 87%, 57%)",
 ];
 
-function StatCard({ 
-  title, 
-  value, 
-  subtitle, 
-  icon: Icon, 
+function StatCard({
+  title,
+  value,
+  subtitle,
+  icon: Icon,
   loading = false,
-  trend
-}: { 
-  title: string; 
-  value: string | number; 
+  trend,
+}: {
+  title: string;
+  value: string | number;
   subtitle?: string;
-  icon: React.ElementType; 
+  icon: React.ElementType;
   loading?: boolean;
   trend?: { value: number; positive: boolean };
 }) {
@@ -108,9 +123,16 @@ function StatCard({
           <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
         )}
         {trend && (
-          <div className={`flex items-center gap-1 mt-1 text-xs ${trend.positive ? 'text-green-600' : 'text-red-500'}`}>
-            <TrendingUp className={`h-3 w-3 ${!trend.positive && 'rotate-180'}`} />
-            <span>{trend.positive ? '+' : ''}{trend.value}% from last month</span>
+          <div
+            className={`flex items-center gap-1 mt-1 text-xs ${trend.positive ? "text-green-600" : "text-red-500"}`}
+          >
+            <TrendingUp
+              className={`h-3 w-3 ${!trend.positive && "rotate-180"}`}
+            />
+            <span>
+              {trend.positive ? "+" : ""}
+              {trend.value}% vs prior month
+            </span>
           </div>
         )}
       </CardContent>
@@ -118,9 +140,37 @@ function StatCard({
   );
 }
 
+function getPreviousMonth() {
+  const now = new Date();
+  const m = now.getMonth() + 1;
+  const y = now.getFullYear();
+  return { month: m === 1 ? 12 : m - 1, year: m === 1 ? y - 1 : y };
+}
+
+function getYearOptions() {
+  const currentYear = new Date().getFullYear();
+  const years: number[] = [];
+  for (let y = currentYear; y >= currentYear - 4; y--) {
+    years.push(y);
+  }
+  return years;
+}
+
 export default function Dashboard() {
+  const prev = getPreviousMonth();
+  const [selectedMonth, setSelectedMonth] = useState<number>(prev.month);
+  const [selectedYear, setSelectedYear] = useState<number>(prev.year);
+
   const { data: stats, isLoading: statsLoading } = useQuery<DashboardStats>({
-    queryKey: ["/api/dashboard/stats"],
+    queryKey: ["/api/dashboard/stats", selectedMonth, selectedYear],
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/dashboard/stats?month=${selectedMonth}&year=${selectedYear}`,
+        { credentials: "include" }
+      );
+      if (!res.ok) throw new Error("Failed to fetch stats");
+      return res.json();
+    },
   });
 
   const { data: recentActivity, isLoading: activityLoading } = useQuery<RecentActivity[]>({
@@ -139,22 +189,74 @@ export default function Dashboard() {
     queryKey: ["/api/dashboard/asset-stats"],
   });
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'PKR',
+  const formatCurrency = (value: number) =>
+    new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "PKR",
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(value);
-  };
+
+  const yearOptions = getYearOptions();
+
+  const trendValue =
+    stats?.prevMonthPayroll && stats.prevMonthPayroll > 0
+      ? Math.round(
+          ((stats.selectedMonthPayroll - stats.prevMonthPayroll) /
+            stats.prevMonthPayroll) *
+            100
+        )
+      : undefined;
 
   return (
     <div className="flex flex-col gap-6 p-6">
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold" data-testid="text-dashboard-title">Dashboard</h1>
-        <p className="text-muted-foreground">
-          Overview of your HR management system
-        </p>
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold" data-testid="text-dashboard-title">
+            Dashboard
+          </h1>
+          <p className="text-muted-foreground">Overview of your HR management system</p>
+        </div>
+
+        <div className="flex items-center gap-2 mt-2 sm:mt-0">
+          <Select
+            value={selectedMonth.toString()}
+            onValueChange={(v) => setSelectedMonth(parseInt(v))}
+          >
+            <SelectTrigger
+              className="w-[140px]"
+              data-testid="select-dashboard-month"
+            >
+              <SelectValue placeholder="Month" />
+            </SelectTrigger>
+            <SelectContent>
+              {MONTH_NAMES.map((name, i) => (
+                <SelectItem key={i + 1} value={(i + 1).toString()}>
+                  {name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={selectedYear.toString()}
+            onValueChange={(v) => setSelectedYear(parseInt(v))}
+          >
+            <SelectTrigger
+              className="w-[100px]"
+              data-testid="select-dashboard-year"
+            >
+              <SelectValue placeholder="Year" />
+            </SelectTrigger>
+            <SelectContent>
+              {yearOptions.map((y) => (
+                <SelectItem key={y} value={y.toString()}>
+                  {y}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -175,25 +277,28 @@ export default function Dashboard() {
         <StatCard
           title="Pending Payroll"
           value={stats?.pendingPayroll ?? 0}
-          subtitle="Awaiting processing"
+          subtitle={`For ${MONTH_NAMES[(selectedMonth ?? 1) - 1]} ${selectedYear}`}
           icon={Clock}
           loading={statsLoading}
         />
         <StatCard
-          title="This Month Payroll"
-          value={formatCurrency(stats?.thisMonthPayroll ?? 0)}
+          title={`${MONTH_NAMES[(selectedMonth ?? 1) - 1]} ${selectedYear} Payroll`}
+          value={formatCurrency(stats?.selectedMonthPayroll ?? 0)}
           subtitle="Total payout"
           icon={DollarSign}
           loading={statsLoading}
-          trend={stats?.lastMonthPayroll ? { 
-            value: Math.round(((stats.thisMonthPayroll - stats.lastMonthPayroll) / stats.lastMonthPayroll) * 100),
-            positive: stats.thisMonthPayroll >= stats.lastMonthPayroll
-          } : undefined}
+          trend={
+            trendValue !== undefined
+              ? { value: trendValue, positive: trendValue >= 0 }
+              : undefined
+          }
         />
       </div>
 
       <div className="flex flex-col gap-1 mt-2">
-        <h2 className="text-lg font-semibold" data-testid="text-asset-stats-title">Asset Management</h2>
+        <h2 className="text-lg font-semibold" data-testid="text-asset-stats-title">
+          Asset Management
+        </h2>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -237,28 +342,33 @@ export default function Dashboard() {
               {payrollHistory && payrollHistory.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={payrollHistory}>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                    <XAxis 
-                      dataKey="month" 
-                      className="text-xs"
-                      tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      className="stroke-muted"
                     />
-                    <YAxis 
+                    <XAxis
+                      dataKey="month"
                       className="text-xs"
-                      tick={{ fill: 'hsl(var(--muted-foreground))' }}
-                      tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
+                      tick={{ fill: "hsl(var(--muted-foreground))" }}
                     />
-                    <Tooltip 
+                    <YAxis
+                      className="text-xs"
+                      tick={{ fill: "hsl(var(--muted-foreground))" }}
+                      tickFormatter={(value) =>
+                        `${(value / 1000).toFixed(0)}k`
+                      }
+                    />
+                    <Tooltip
                       formatter={(value: number) => formatCurrency(value)}
                       contentStyle={{
-                        backgroundColor: 'hsl(var(--card))',
-                        border: '1px solid hsl(var(--border))',
-                        borderRadius: '6px',
+                        backgroundColor: "hsl(var(--card))",
+                        border: "1px solid hsl(var(--border))",
+                        borderRadius: "6px",
                       }}
                     />
-                    <Bar 
-                      dataKey="amount" 
-                      fill="hsl(217, 91%, 60%)" 
+                    <Bar
+                      dataKey="amount"
+                      fill="hsl(217, 91%, 60%)"
                       radius={[4, 4, 0, 0]}
                     />
                   </BarChart>
@@ -274,7 +384,9 @@ export default function Dashboard() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base font-medium">Department Distribution</CardTitle>
+            <CardTitle className="text-base font-medium">
+              Department Distribution
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="h-[300px]">
@@ -290,21 +402,23 @@ export default function Dashboard() {
                       paddingAngle={2}
                       dataKey="count"
                       nameKey="name"
-                      label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
+                      label={({ name, percent }) =>
+                        `${name} (${(percent * 100).toFixed(0)}%)`
+                      }
                       labelLine={false}
                     >
                       {departmentData.map((_, index) => (
-                        <Cell 
-                          key={`cell-${index}`} 
-                          fill={CHART_COLORS[index % CHART_COLORS.length]} 
+                        <Cell
+                          key={`cell-${index}`}
+                          fill={CHART_COLORS[index % CHART_COLORS.length]}
                         />
                       ))}
                     </Pie>
-                    <Tooltip 
+                    <Tooltip
                       contentStyle={{
-                        backgroundColor: 'hsl(var(--card))',
-                        border: '1px solid hsl(var(--border))',
-                        borderRadius: '6px',
+                        backgroundColor: "hsl(var(--card))",
+                        border: "1px solid hsl(var(--border))",
+                        borderRadius: "6px",
                       }}
                     />
                   </PieChart>
@@ -339,8 +453,8 @@ export default function Dashboard() {
           ) : recentActivity && recentActivity.length > 0 ? (
             <div className="space-y-4">
               {recentActivity.map((activity) => (
-                <div 
-                  key={activity.id} 
+                <div
+                  key={activity.id}
                   className="flex items-start gap-4 pb-4 border-b border-border last:border-0 last:pb-0"
                   data-testid={`activity-item-${activity.id}`}
                 >

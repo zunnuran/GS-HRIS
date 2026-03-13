@@ -25,7 +25,12 @@ export async function registerRoutes(
   // Dashboard routes
   app.get("/api/dashboard/stats", isAuthenticated, async (req, res) => {
     try {
-      const stats = await storage.getDashboardStats();
+      const month = req.query.month ? parseInt(req.query.month as string) : undefined;
+      const year = req.query.year ? parseInt(req.query.year as string) : undefined;
+      const stats = await storage.getDashboardStats(
+        month && !isNaN(month) ? month : undefined,
+        year && !isNaN(year) ? year : undefined,
+      );
       res.json(stats);
     } catch (error) {
       console.error("Error fetching dashboard stats:", error);

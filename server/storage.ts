@@ -70,13 +70,15 @@ export interface IStorage {
   getEmployeeByName(firstName: string, lastName: string): Promise<Employee | undefined>;
 
   // Dashboard stats
-  getDashboardStats(): Promise<{
+  getDashboardStats(selectedMonth?: number, selectedYear?: number): Promise<{
     totalEmployees: number;
     activeEmployees: number;
     totalDepartments: number;
     pendingPayroll: number;
-    thisMonthPayroll: number;
-    lastMonthPayroll: number;
+    selectedMonthPayroll: number;
+    prevMonthPayroll: number;
+    selectedMonth: number;
+    selectedYear: number;
   }>;
   getPayrollHistory(): Promise<{ month: string; amount: number }[]>;
   getRecentActivity(): Promise<{ id: number; type: string; description: string; timestamp: string }[]>;
@@ -366,12 +368,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Dashboard stats
-  async getDashboardStats() {
+  async getDashboardStats(selectedMonth?: number, selectedYear?: number) {
     const now = new Date();
     const currentMonth = now.getMonth() + 1;
     const currentYear = now.getFullYear();
-    const lastMonth = currentMonth === 1 ? 12 : currentMonth - 1;
-    const lastMonthYear = currentMonth === 1 ? currentYear - 1 : currentYear;
+
+    const targetMonth = selectedMonth ?? (currentMonth === 1 ? 12 : currentMonth - 1);
+    const targetYear = selectedYear ?? (currentMonth === 1 ? currentYear - 1 : currentYear);
+
+    const prevMonth = targetMonth === 1 ? 12 : targetMonth - 1;
+    const prevMonthYear = targetMonth === 1 ? targetYear - 1 : targetYear;
 
     const [totalEmployeesResult] = await db
       .select({ count: sql<number>`cast(count(*) as int)` })
@@ -389,25 +395,31 @@ export class DatabaseStorage implements IStorage {
     const [pendingPayrollResult] = await db
       .select({ count: sql<number>`cast(count(*) as int)` })
       .from(payrollRecords)
-      .where(eq(payrollRecords.status, "pending"));
-
-    const [thisMonthPayrollResult] = await db
-      .select({ total: sql<number>`coalesce(sum(cast(${payrollRecords.netSalary} as numeric)), 0)` })
-      .from(payrollRecords)
       .where(
         and(
-          eq(payrollRecords.month, currentMonth),
-          eq(payrollRecords.year, currentYear)
+          eq(payrollRecords.status, "pending"),
+          eq(payrollRecords.month, targetMonth),
+          eq(payrollRecords.year, targetYear)
         )
       );
 
-    const [lastMonthPayrollResult] = await db
+    const [selectedMonthPayrollResult] = await db
       .select({ total: sql<number>`coalesce(sum(cast(${payrollRecords.netSalary} as numeric)), 0)` })
       .from(payrollRecords)
       .where(
         and(
-          eq(payrollRecords.month, lastMonth),
-          eq(payrollRecords.year, lastMonthYear)
+          eq(payrollRecords.month, targetMonth),
+          eq(payrollRecords.year, targetYear)
+        )
+      );
+
+    const [prevMonthPayrollResult] = await db
+      .select({ total: sql<number>`coalesce(sum(cast(${payrollRecords.netSalary} as numeric)), 0)` })
+      .from(payrollRecords)
+      .where(
+        and(
+          eq(payrollRecords.month, prevMonth),
+          eq(payrollRecords.year, prevMonthYear)
         )
       );
 
@@ -416,8 +428,10 @@ export class DatabaseStorage implements IStorage {
       activeEmployees: activeEmployeesResult?.count ?? 0,
       totalDepartments: departmentsResult?.count ?? 0,
       pendingPayroll: pendingPayrollResult?.count ?? 0,
-      thisMonthPayroll: Number(thisMonthPayrollResult?.total ?? 0),
-      lastMonthPayroll: Number(lastMonthPayrollResult?.total ?? 0),
+      selectedMonthPayroll: Number(selectedMonthPayrollResult?.total ?? 0),
+      prevMonthPayroll: Number(prevMonthPayrollResult?.total ?? 0),
+      selectedMonth: targetMonth,
+      selectedYear: targetYear,
     };
   }
 
