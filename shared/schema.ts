@@ -389,3 +389,12 @@ export type AssetAssignmentWithDetails = AssetAssignment & {
   asset?: Asset | null;
   employee?: Employee | null;
 };
+
+// Settings table (key-value store for server-side config)
+export const settings = pgTable("settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export type Setting = typeof settings.$inferSelect;

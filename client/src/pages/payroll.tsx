@@ -1911,7 +1911,6 @@ export default function Payroll() {
 
   const [importOpen, setImportOpen] = useState(false);
   const [importUrl, setImportUrl] = useState("");
-  const [importToken, setImportToken] = useState("");
   const [importLoading, setImportLoading] = useState(false);
   const [importResults, setImportResults] = useState<null | {
     month: number; year: number;
@@ -1930,8 +1929,8 @@ export default function Payroll() {
   const { toast } = useToast();
 
   const handleImport = async () => {
-    if (!importUrl.trim() || !importToken.trim()) {
-      toast({ title: "Missing fields", description: "Please enter both the Report URL and Token.", variant: "destructive" });
+    if (!importUrl.trim()) {
+      toast({ title: "Missing field", description: "Please enter the Report URL.", variant: "destructive" });
       return;
     }
     setImportLoading(true);
@@ -1939,7 +1938,6 @@ export default function Payroll() {
     try {
       const res = await apiRequest("POST", "/api/payroll/import-tahometer", {
         reportUrl: importUrl.trim(),
-        token: importToken.trim(),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -2202,7 +2200,7 @@ export default function Payroll() {
             <div className="space-y-4 pt-2">
               <div className="rounded-md bg-muted/50 p-3 text-sm text-muted-foreground flex gap-2">
                 <Info className="h-4 w-4 mt-0.5 shrink-0" />
-                <span>Enter the report page URL and your API token. Time data will be imported per employee per week and matched by first &amp; last name.</span>
+                <span>Enter the report page URL. Time data will be imported per employee per week and matched by first &amp; last name. The API token is read from Settings.</span>
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Report URL</label>
@@ -2210,18 +2208,9 @@ export default function Payroll() {
                   placeholder="https://gameverse.tahometer.com/app/reports/5540"
                   value={importUrl}
                   onChange={(e) => setImportUrl(e.target.value)}
+                  data-testid="input-import-url"
                 />
-                <p className="text-xs text-muted-foreground">The full URL of the report page (used as Referer header)</p>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Token</label>
-                <Input
-                  type="password"
-                  placeholder="Your Bearer token"
-                  value={importToken}
-                  onChange={(e) => setImportToken(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">Used as the Bearer authorization token</p>
+                <p className="text-xs text-muted-foreground">The full URL of the report page</p>
               </div>
               <div className="flex justify-end gap-2 pt-2">
                 <Button variant="outline" onClick={() => setImportOpen(false)}>Cancel</Button>

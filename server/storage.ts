@@ -10,6 +10,7 @@ import {
   assets,
   assetAssignments,
   assetCodeSequence,
+  settings,
   type User,
   type InsertUser,
   type Department,
@@ -82,6 +83,10 @@ export interface IStorage {
   }>;
   getPayrollHistory(): Promise<{ month: string; amount: number }[]>;
   getRecentActivity(): Promise<{ id: number; type: string; description: string; timestamp: string }[]>;
+
+  // Settings operations
+  getSetting(key: string): Promise<string | null>;
+  setSetting(key: string, value: string): Promise<void>;
 
   // Seed default data
   seedDefaultData(): Promise<void>;
@@ -816,6 +821,18 @@ export class DatabaseStorage implements IStorage {
         damaged: damagedResult?.count ?? 0,
       },
     };
+  }
+
+  async getSetting(key: string): Promise<string | null> {
+    const [row] = await db.select().from(settings).where(eq(settings.key, key));
+    return row?.value ?? null;
+  }
+
+  async setSetting(key: string, value: string): Promise<void> {
+    await db
+      .insert(settings)
+      .values({ key, value })
+      .onConflictDoUpdate({ target: settings.key, set: { value, updatedAt: new Date() } });
   }
 }
 

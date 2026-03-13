@@ -298,13 +298,41 @@ export async function registerRoutes(
     }
   });
 
+  // Settings routes — Tahometer token (never returned to frontend)
+  app.get("/api/settings/tahometer-token", isAuthenticated, async (_req, res) => {
+    try {
+      const token = await storage.getSetting("tahometer_token");
+      res.json({ hasToken: !!token });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch setting" });
+    }
+  });
+
+  app.put("/api/settings/tahometer-token", isAuthenticated, async (req, res) => {
+    try {
+      const { token } = req.body as { token: string };
+      if (!token || typeof token !== "string" || !token.trim()) {
+        return res.status(400).json({ message: "Token is required" });
+      }
+      await storage.setSetting("tahometer_token", token.trim());
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to save setting" });
+    }
+  });
+
   // Tahometer payroll import route
   app.post("/api/payroll/import-tahometer", isAuthenticated, async (req, res) => {
     try {
-      const { reportUrl, token } = req.body as { reportUrl: string; token: string };
+      const { reportUrl } = req.body as { reportUrl: string };
 
-      if (!reportUrl || !token) {
-        return res.status(400).json({ message: "reportUrl and token are required" });
+      if (!reportUrl) {
+        return res.status(400).json({ message: "reportUrl is required" });
+      }
+
+      const token = await storage.getSetting("tahometer_token");
+      if (!token) {
+        return res.status(400).json({ message: "Tahometer API token is not configured. Please set it in Settings." });
       }
 
       // Extract subdomain and report ID from the URL
